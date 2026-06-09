@@ -12,6 +12,7 @@ import time
 import hmac
 import hashlib
 import base64
+import sys
 from datetime import datetime
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -726,6 +727,11 @@ def get_ledger_time(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/sysinfo")
+def get_sys_info():
+    """Check the runtime environment information (e.g., Python version)."""
+    return {"python_version": sys.version}
 
 @app.get("/search_tokens")
 def search_tokens(request: Request, currency: Optional[str] = None, name: Optional[str] = None):

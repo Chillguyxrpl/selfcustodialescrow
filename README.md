@@ -19,7 +19,7 @@ This project provides a beautiful frontend UI and a robust FastAPI backend that 
 ## 🚀 Getting Started
 
 ### Prerequisites
-* Python 3.9+
+* Python 3.12
 * A Xaman Developer Console account (to get your API Keys)
 
 ### 1. Installation
