@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
 import requests
-import sqlite3
+import psycopg2
 import json
 import time
 import hmac
@@ -77,7 +77,7 @@ def currencies_match(c1: str, c2: str) -> bool:
     return to_hex(c1) == to_hex(c2)
 
 BASE_DIR = os.path.dirname(__file__)
-DB_PATH = os.path.join(BASE_DIR, "xumm.db")
+POSTGRES_URL = os.getenv("POSTGRES_URL")
 TEMPLATES_FILE = os.path.join(BASE_DIR, "templates.json")
 
 load_dotenv()
@@ -117,18 +117,29 @@ def create_requests_session() -> requests.Session:
 session = create_requests_session()
 
 
-def init_db():
-    with closing(sqlite3.connect(DB_PATH)) as conn:
-        with conn:
-            conn.execute("""
-            CREATE TABLE IF NOT EXISTS payloads (
-                uuid TEXT PRIMARY KEY,
-                response TEXT,
-                status TEXT,
-                created_at REAL
-            )
-            """)
+def get_db_connection():
+    if not POSTGRES_URL:
+        raise RuntimeError("POSTGRES_URL environment variable is not set. Please attach a Vercel Postgres database.")
+    return psycopg2.connect(POSTGRES_URL)
 
+def init_db():
+    if not POSTGRES_URL:
+        print("Skipping DB init: POSTGRES_URL not set")
+        return
+    try:
+        with closing(get_db_connection()) as conn:
+            with conn.cursor() as c:
+                c.execute("""
+                CREATE TABLE IF NOT EXISTS payloads (
+                    uuid TEXT PRIMARY KEY,
+                    response TEXT,
+                    status TEXT,
+                    created_at DOUBLE PRECISION
+                )
+                """)
+            conn.commit()
+    except Exception as e:
+        print(f"Database initialization failed: {e}")
 
 init_db()
 
@@ -823,33 +834,41 @@ def xaman_redirect(target: str):
 
 
 def store_payload_with_retries(uuid: str, body: dict, max_attempts: int = 5):
+    if not POSTGRES_URL:
+        return
     attempt = 0
     payload_str = json.dumps(body)
     status = simplify_state(body) or "unknown"
     while attempt < max_attempts:
         try:
-            with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
-                with conn:
-                    conn.execute("""
+            with closing(get_db_connection()) as conn:
+                with conn.cursor() as c:
+                    c.execute("""
                         INSERT INTO payloads (uuid, response, status, created_at) 
-                        VALUES (?, ?, ?, ?)
+                        VALUES (%s, %s, %s, %s)
                         ON CONFLICT(uuid) DO UPDATE SET 
-                            response = excluded.response, 
-                            status = excluded.status
+                            response = EXCLUDED.response, 
+                            status = EXCLUDED.status
                     """, (uuid, payload_str, status, time.time()))
+                conn.commit()
             return  # Successful insert, exit function
-        except sqlite3.OperationalError as exc:
+        except psycopg2.OperationalError as exc:
             attempt += 1
-            if attempt >= max_attempts or "locked" not in str(exc).lower():
+            if attempt >= max_attempts:
                 raise
             time.sleep(0.2 * attempt)
 
 
 def load_local_payload(uuid: str):
-    with closing(sqlite3.connect(DB_PATH)) as conn:
-        c = conn.cursor()
-        c.execute("SELECT response, status, created_at FROM payloads WHERE uuid = ?", (uuid,))
-        row = c.fetchone()
+    if not POSTGRES_URL:
+        return None
+    try:
+        with closing(get_db_connection()) as conn:
+            with conn.cursor() as c:
+                c.execute("SELECT response, status, created_at FROM payloads WHERE uuid = %s", (uuid,))
+                row = c.fetchone()
+    except Exception:
+        return None
 
     if not row:
         return None
