@@ -1,0 +1,129 @@
+{
+  "timed_escrow_create": {
+    "description": "Create a timed escrow that releases funds after a specific time",
+    "escrow_type": "timed",
+    "txjson": {
+      "TransactionType": "EscrowCreate",
+      "Account": "{{ACCOUNT}}",
+      "Destination": "{{DESTINATION}}",
+      "DestinationTag": "{{DESTINATION_TAG}}",
+      "Amount": "{{AMOUNT}}",
+      "FinishAfter": "{{FINISH_AFTER}}",
+      "CancelAfter": "{{CANCEL_AFTER}}",
+      "Condition": "{{CONDITION}}"
+    }
+  },
+  "conditional_escrow_create": {
+    "description": "Create a conditional escrow that requires fulfillment",
+    "escrow_type": "conditional",
+    "txjson": {
+      "TransactionType": "EscrowCreate",
+      "Account": "{{ACCOUNT}}",
+      "Destination": "{{DESTINATION}}",
+      "DestinationTag": "{{DESTINATION_TAG}}",
+      "Amount": "{{AMOUNT}}",
+      "Condition": "{{CONDITION}}",
+      "FinishAfter": "{{FINISH_AFTER}}",
+      "CancelAfter": "{{CANCEL_AFTER}}"
+    }
+  },
+  "oracle_price_threshold": {
+    "description": "Create a price-threshold escrow that releases funds when a token pair hits the target price.",
+    "escrow_type": "conditional",
+    "txjson": {
+      "TransactionType": "EscrowCreate",
+      "Account": "{{ACCOUNT}}",
+      "Destination": "{{DESTINATION}}",
+      "DestinationTag": "{{DESTINATION_TAG}}",
+      "Amount": "{{AMOUNT}}",
+      "Condition": "{{CONDITION}}",
+      "FinishAfter": "{{FINISH_AFTER}}",
+      "CancelAfter": "{{CANCEL_AFTER}}"
+    }
+  },
+  "escrow_finish": {
+    "description": "Finish/release a conditional escrow",
+    "escrow_type": "conditional",
+    "txjson": {
+      "TransactionType": "EscrowFinish",
+      "Account": "{{ACCOUNT}}",
+      "Owner": "{{OWNER}}",
+      "OfferSequence": "{{OFFER_SEQUENCE}}",
+      "Fulfillment": "{{FULFILLMENT}}"
+    }
+  },
+  "escrow_cancel": {
+    "description": "Cancel an expired escrow and return funds to the owner",
+    "escrow_type": "cancel",
+    "txjson": {
+      "TransactionType": "EscrowCancel",
+      "Account": "{{ACCOUNT}}",
+      "Owner": "{{OWNER}}",
+      "OfferSequence": "{{OFFER_SEQUENCE}}"
+    }
+  },
+  "token_payment": {
+    "description": "Payment of an issued token (Layer-2) using drops or token amount",
+    "escrow_type": "payment",
+    "txjson": {
+      "TransactionType": "Payment",
+      "Account": "{{ACCOUNT}}",
+      "Destination": "{{DESTINATION}}",
+      "Amount": "{{AMOUNT}}"
+    }
+  },
+  "trustline": {
+    "description": "Create TrustLine for issued token",
+    "escrow_type": "payment",
+    "txjson": {
+      "TransactionType": "TrustSet",
+      "Account": "{{ACCOUNT}}",
+      "LimitAmount": {
+        "currency": "{{CURRENCY}}",
+        "issuer": "{{ISSUER}}",
+        "value": "{{LIMIT}}"
+      }
+    }
+  },
+  "issue_token": {
+    "description": "Issue a token via Payment from issuer to recipient",
+    "escrow_type": "payment",
+    "txjson": {
+      "TransactionType": "Payment",
+      "Account": "{{ISSUER}}",
+      "Destination": "{{DESTINATION}}",
+      "Amount": {
+        "currency": "{{CURRENCY}}",
+        "issuer": "{{ISSUER}}",
+        "value": "{{AMOUNT}}"
+      }
+    }
+  },
+  "enable_token_escrows": {
+    "description": "Enable Trust Line Locking on your issuer account (Prerequisite for IOU Escrows).",
+    "escrow_type": "account_set",
+    "txjson": {
+      "TransactionType": "AccountSet",
+      "Account": "{{ACCOUNT}}",
+      "SetFlag": 18,
+      "ClearFlag": "{{CLEAR_FLAG}}",
+      "Domain": "{{DOMAIN}}",
+      "EmailHash": "{{EMAIL_HASH}}",
+      "MessageKey": "{{MESSAGE_KEY}}",
+      "TransferRate": "{{TRANSFER_RATE}}",
+      "TickSize": "{{TICK_SIZE}}",
+      "Memos": "{{MEMOS}}"
+    }
+  },
+  "drop_tool": {
+    "description": "Airdrop native XRP or issued tokens to a destination.",
+    "escrow_type": "payment",
+    "txjson": {
+      "TransactionType": "Payment",
+      "Account": "{{ACCOUNT}}",
+        "Destination": "{{DESTINATION}}",
+        "Amount": "{{AMOUNT}}",
+        "Memos": "{{MEMOS}}"
+    }
+  }
+}

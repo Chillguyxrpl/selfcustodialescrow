@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Just a Chill Escrow</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" />
+    <style>
+      :root {
+        --primary-color: #2c3e50;
+        --primary-gradient: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+        --success-color: #10b981;
+        --warning-color: #f59e0b;
+        --danger-color: #ef4444;
+        --bg-color: #e8ecf1;
+        --text-color: #2c3e50;
+        --card-bg: #ffffff;
+        --card-header-bg: #d5dce0;
+        --card-border: #c4cdd1;
+        --template-active-bg: #f8fafc;
+      }
+      [data-bs-theme="dark"] {
+        color-scheme: dark;
+        --primary-color: #6ea8fe;
+        --primary-gradient: linear-gradient(135deg, #1a1d20 0%, #212529 100%);
+        --bg-color: #000000;
+        --text-color: #e8ecf1;
+        --card-bg: #121212;
+        --card-header-bg: #1a1a1a;
+        --card-border: #2d2d2d;
+        --template-active-bg: #2c3e50;
+      }
+      body {
+        background: var(--bg-color);
+        color: var(--text-color);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        transition: background-color 0.3s, color 0.3s;
+      }
+      .navbar {
+        background: var(--primary-gradient);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+      .navbar-brand {
+        font-weight: 700;
+        font-size: 1.4rem;
+        letter-spacing: -0.5px;
+        color: #fff !important;
+      }
+      .card {
+        border: none;
+        background: var(--card-bg);
+        box-shadow: 0 2px 8px rgba(44, 62, 80, 0.08);
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+      }
+      .card-header {
+        background: var(--card-header-bg);
+        border-bottom: 1px solid var(--card-border);
+        border-radius: 8px 8px 0 0;
+        color: var(--text-color);
+      }
+      .btn-primary {
+        background: var(--primary-gradient);
+        border: none;
+        color: #fff;
+        border-radius: 6px;
+        font-weight: 600;
+        padding: 0.6rem 1.5rem;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(44, 62, 80, 0.3);
+        color: #fff;
+      }
+      .form-control, .form-select {
+        border: 1px solid #c4cdd1;
+        border-radius: 6px;
+        padding: 0.6rem 0.8rem;
+        color: #2c3e50;
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+      .form-control:focus, .form-select:focus {
+        border-color: #2c3e50;
+        color: #2c3e50;
+        box-shadow: 0 0 0 3px rgba(44, 62, 80, 0.1);
+      }
+      .status-badge {
+        display: inline-block;
+        padding: 0.4rem 0.8rem;
+        border-radius: 12px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        margin: 0.25rem 0.25rem 0.25rem 0;
+      }
+      .status-success {
+        background: #d1fae5;
+        color: var(--success-color);
+      }
+      .status-warning {
+        background: #fef3c7;
+        color: var(--warning-color);
+      }
+      .status-error {
+        background: #fee2e2;
+        color: var(--danger-color);
+      }
+      .status-info {
+        background: #dbeafe;
+        color: #3b82f6;
+      }
+      .uuid-display {
+        background: #f3f4f6;
+        padding: 0.75rem 1rem;
+        border-radius: 6px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.875rem;
+        word-break: break-all;
+        border-left: 3px solid #667eea;
+        margin: 1rem 0;
+        gap: 10px;
+      }
+      .uuid-display strong {
+        white-space: nowrap;
+      }
+      .loading-spinner {
+        display: none;
+        margin-left: 0.5rem;
+      }
+      .loading-spinner.active {
+        display: inline-block;
+      }
+      .result-panel {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        padding: 1rem;
+        max-height: 400px;
+        overflow-y: auto;
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+      }
+      .alert {
+        border-radius: 6px;
+        border: none;
+      }
+      .btn-group-sm .btn {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.875rem;
+      }
+      .collapse-btn {
+        text-decoration: none;
+        color: var(--text-color);
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .collapse-btn:hover {
+        color: #34495e;
+      }
+      .section-icon {
+        margin-right: 0.5rem;
+        font-size: 1.2rem;
+      }
+      .template-card {
+        cursor: pointer;
+        border: 2px solid #e5e7eb !important;
+        transition: all 0.2s ease-in-out;
+      }
+      .template-card:hover {
+        border-color: #c4cdd1 !important;
+        transform: translateY(-2px);
+      }
+      .template-card.active-template {
+        border-color: var(--primary-color) !important;
+        background-color: var(--template-active-bg) !important;
+        box-shadow: 0 4px 6px rgba(44, 62, 80, 0.1);
+      }
+      [data-bs-theme="dark"] .navbar .btn-light,
+      [data-bs-theme="dark"] .navbar .btn-outline-light:hover,
+      [data-bs-theme="dark"] .navbar .btn-outline-light:active,
+      [data-bs-theme="dark"] .navbar .btn-outline-light.active {
+        background-color: #2c3e50 !important;
+        border-color: #2c3e50 !important;
+        color: #f8f9fa !important;
+      }
+      [data-bs-theme="dark"] .form-control,
+      [data-bs-theme="dark"] .form-select {
+        background-color: #0a0a0a;
+        border-color: #2d2d2d;
+        color: #e8ecf1;
+      }
+      [data-bs-theme="dark"] .form-control:focus,
+      [data-bs-theme="dark"] .form-select:focus {
+        background-color: #000000;
+        color: #e8ecf1;
+        border-color: var(--primary-color);
+      }
+      [data-bs-theme="dark"] .uuid-display,
+      [data-bs-theme="dark"] .result-panel {
+        background: #0a0a0a;
+        color: #e8ecf1;
+        border-color: #2d2d2d;
+      }
+      [data-bs-theme="dark"] .collapse-btn:hover {
+        color: var(--primary-color);
+      }
+      /* Real-time Validation Styles */
+      .form-control.is-valid,
+      .form-select.is-valid {
+        border-color: #10b981 !important;
+        background-image: none;
+      }
+      .form-control.is-valid:focus,
+      .form-select.is-valid:focus {
+        border-color: #10b981 !important;
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15) !important;
+      }
+      .valid-check {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #10b981;
+        font-size: 1.2rem;
+        animation: slideInCheck 0.3s ease-out;
+      }
+      @keyframes slideInCheck {
+        from {
+          opacity: 0;
+          transform: translateX(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      .invalid-feedback {
+        display: block;
+        color: #ef4444;
+        font-size: 0.875rem;
+        margin-top: 0.25rem;
+        animation: slideInError 0.2s ease-out;
+      }
+      @keyframes slideInError {
+        from {
+          opacity: 0;
+          transform: translateY(-5px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .validation-spinner {
+        display: none;
+        position: absolute;
+        top: 0;
+        right: 0;
+        margin-top: 0.5rem;
+        margin-right: 0.5rem;
+      }
+      .validation-spinner.active {
+        display: inline-flex;
+      }
+      [data-bs-theme="dark"] .form-control.is-valid,
+      [data-bs-theme="dark"] .form-select.is-valid {
+        border-color: #10b981 !important;
+      }
+      /* Toast Notifications Styles */
+      .toast-container {
+        z-index: 1055 !important;
+      }
+      .toast {
+        min-width: 320px;
+        max-width: 500px;
+        border-radius: 8px;
+        border: none;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        overflow: hidden;
+        animation: slideInToast 0.3s cubic-bezier(0.23, 1, 0.320, 1);
+      }
+      @keyframes slideInToast {
+        from {
+          opacity: 0;
+          transform: translateX(100px) translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0) translateY(0);
+        }
+      }
+      .toast-progress {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        height: 3px;
+        background: rgba(255, 255, 255, 0.5);
+        animation: progressBar 5s linear forwards;
+      }
+      @keyframes progressBar {
+        from {
+          width: 100%;
+        }
+        to {
+          width: 0%;
+        }
+      }
+      .toast-success {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: #fff;
+      }
+      .toast-error {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        color: #fff;
+      }
+      .toast-warning {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: #fff;
+      }
+      .toast-info {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: #fff;
+      }
+      .toast-copy {
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        color: #fff;
+      }
+      .toast-body {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        font-weight: 500;
+      }
+      .toast-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        flex-shrink: 0;
+      }
+      .toast-content {
+        flex: 1;
+        overflow: hidden;
+      }
+      .toast-msg {
+        display: block;
+        word-break: break-word;
+        line-height: 1.4;
+      }
+      .btn-close-toast {
+        padding: 0 8px;
+        color: inherit;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+      }
+      .btn-close-toast:hover {
+        opacity: 1;
+      }
+      .toast-action {
+        padding: 6px 12px;
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        border-radius: 4px;
+        color: inherit;
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 500;
+        transition: background 0.2s;
+        white-space: nowrap;
+      }
+      .toast-action:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+      [data-bs-theme="dark"] .toast {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      }
+      /* Safety Warnings Styles */
+      .safety-warnings {
+        animation: slideInUp 0.4s cubic-bezier(0.23, 1, 0.320, 1);
+      }
+      @keyframes slideInUp {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      [data-bs-theme="dark"] .bg-light {
+        background-color: #1a1a1a !important;
+        border-color: #2d2d2d;
+      }
+      [data-bs-theme="dark"] .text-muted {
+        color: #9ca3af !important;
+      }
+      /* Duration Quick-Select Buttons */
+      .btn-group-duration {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+      }
+      .duration-quick-btn {
+        flex: 1;
+        min-width: 60px;
+        padding: 0.4rem 0.75rem;
+        font-size: 0.85rem;
+        font-weight: 500;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+        border: 1.5px solid #d1d5db;
+      }
+      .duration-quick-btn:hover {
+        border-color: #2c3e50;
+        background-color: rgba(44, 62, 80, 0.05);
+        transform: translateY(-1px);
+      }
+      .duration-quick-btn.active {
+        background-color: #2c3e50;
+        color: #fff;
+        border-color: #2c3e50;
+        box-shadow: 0 2px 8px rgba(44, 62, 80, 0.3);
+      }
+      .duration-quick-btn i {
+        margin-right: 0.35rem;
+        font-size: 0.95rem;
+      }
+      [data-bs-theme="dark"] .duration-quick-btn {
+        border-color: #404040;
+        background-color: #0f0f0f;
+        color: #e8ecf1;
+      }
+      [data-bs-theme="dark"] .duration-quick-btn:hover {
+        background-color: rgba(110, 168, 254, 0.1);
+        border-color: #6ea8fe;
+      }
+      [data-bs-theme="dark"] .duration-quick-btn.active {
+        background-color: #6ea8fe;
+        color: #000;
+        border-color: #6ea8fe;
+        box-shadow: 0 2px 8px rgba(110, 168, 254, 0.4);
+      }
+      @media (max-width: 768px) {
+        .container {
+          padding: 1rem;
+        }
+        .card {
+          margin-bottom: 1rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="navbar navbar-dark mb-4">
+      <div class="container d-flex justify-content-between align-items-center">
+        <span class="navbar-brand">
+          <i class="bi bi-shield-lock"></i> Just a Chill Escrow
+        </span>
+        <div class="d-flex align-items-center gap-2">
+          <button id="themeToggleBtn" class="btn btn-outline-light btn-sm" type="button" title="Toggle Dark/Light Mode">
+            <i class="bi bi-moon-stars-fill"></i>
+          </button>
+          <button id="connectXamanBtn" class="btn btn-outline-light btn-sm" type="button" title="Connect Wallet">
+            <i class="bi bi-qr-code-scan"></i> Connect Wallet
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container mt-4 pb-5">
+      <!-- Templates Section -->
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">
+            <i class="bi bi-file-earmark-template section-icon"></i>
+            <a class="collapse-btn" data-bs-toggle="collapse" href="#templatesSection">
+              Build an Escrow
+            </a>
+          </h5>
+        </div>
+        <div class="card-body collapse show" id="templatesSection">
+          <div class="row mb-3">
+            <div class="col-md-8">
+              <label class="form-label d-flex align-items-center gap-2 mb-1">
+                <strong>Select an Escrow</strong>
+                <button type="button" class="btn btn-link btn-sm p-0" data-bs-toggle="modal" data-bs-target="#escrowInfoModal" aria-label="Escrow type help">
+                  <i class="bi bi-info-circle"></i>
+                </button>
+              </label>
+              <select id="templateSelect" class="form-select d-none">
+                <option value="">Select an escrow...</option>
+              </select>
+              <div id="templateGrid" class="row g-2 mt-1"></div>
+              <small class="text-muted d-block mt-1" id="templateDesc"></small>
+            </div>
+          </div>
+          <div class="row mb-3" id="escrowDurationRow" style="display: none;">
+            <div class="col-md-4">
+              <label class="form-label"><strong>Escrow Duration (Hours)</strong> <i class="bi bi-info-circle ms-1 text-muted" data-bs-toggle="tooltip" title="Number of hours until the escrow can be finished/claimed." style="cursor: help;"></i></label>
+              <input id="escrowDurationHours" type="number" class="form-control" placeholder="e.g., 1.5 for 90 minutes" min="0" step="any" />
+              <small class="text-muted d-block mt-2 mb-2">Specify duration in hours...</small>
+              <div class="btn-group-duration" role="group" aria-label="Quick duration">
+                <button type="button" class="btn btn-sm btn-outline-secondary duration-quick-btn" data-hours="1" title="1 hour">
+                  <i class="bi bi-clock"></i> 1h
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary duration-quick-btn" data-hours="24" title="1 day">
+                  <i class="bi bi-calendar-day"></i> 1d
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary duration-quick-btn" data-hours="168" title="1 week">
+                  <i class="bi bi-calendar-week"></i> 1w
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary duration-quick-btn" data-hours="720" title="1 month">
+                  <i class="bi bi-calendar"></i> 1mo
+                </button>
+              </div>
+            </div>
+            <div class="col-md-4 mt-3 mt-md-0">
+              <label class="form-label"><strong>Finish Date & Time</strong> <i class="bi bi-info-circle ms-1 text-muted" data-bs-toggle="tooltip" title="An exact local date and time when the escrow can be finished/claimed." style="cursor: help;"></i></label>
+              <input id="escrowFinishDatetime" type="datetime-local" class="form-control" />
+              <small class="text-muted d-block mt-1">...or pick an exact future release time.</small>
+            </div>
+            <div class="col-md-4 mt-3 mt-md-0">
+              <label class="form-label"><strong>Cancel Date & Time</strong> <i class="bi bi-info-circle ms-1 text-muted" data-bs-toggle="tooltip" title="An exact local date and time when the escrow expires and can be cancelled." style="cursor: help;"></i></label>
+              <input id="escrowCancelDatetime" type="datetime-local" class="form-control" />
+              <small class="text-muted d-block mt-1">...auto-calculated to 30 days after finish.</small>
+            </div>
+          </div>
+          <div id="templateFields" class="row mb-3"></div>
+          <div class="d-grid gap-2 d-md-flex gap-md-2">
+            <button id="buildPayload" class="btn btn-primary">
+              <i class="bi bi-play-circle"></i> Build & Create XUMM Payload
+              <span class="loading-spinner" id="buildSpinner">
+                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+              </span>
+            </button>
+          </div>
+          <div id="payloadResult" class="mt-3"></div>
+          <div id="payloadPollingStatus" class="mt-3"></div>
+        </div>
+      </div>
+
+      <!-- L2 Token Auto-Release Vault Section -->
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">
+            <i class="bi bi-clock-history section-icon"></i>
+            <a class="collapse-btn" data-bs-toggle="collapse" href="#l2VaultSection">
+              L2 Token Auto-Release Vault (Browser Node)
+            </a>
+          </h5>
+        </div>
+        <div class="card-body collapse" id="l2VaultSection">
+          <div class="alert alert-danger mb-3">
+            <strong><i class="bi bi-shield-exclamation"></i> Security Warning:</strong> Pasting your private seed into any web browser exposes it to malicious extensions or Cross-Site Scripting (XSS). <strong>Use a burner wallet only!</strong> This circumvents the core safety of the Xaman app. While your seed is processed entirely locally and never leaves your device, you assume all risks. <strong>Keep this tab open</strong> until the release time is reached for the auto-sweep transaction to execute!
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label"><strong>Vault Seed</strong></label>
+              <input type="password" id="vaultSeed" class="form-control" placeholder="sEd...">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label"><strong>Destination Address</strong></label>
+              <input type="text" id="vaultDestination" class="form-control" placeholder="r...">
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label"><strong>Token Currency Code</strong></label>
+              <input type="text" id="vaultCurrency" class="form-control" placeholder="e.g. USD">
+            </div>
+            <div class="col-md-8 mb-3">
+              <label class="form-label"><strong>Token Issuer Address</strong></label>
+              <input type="text" id="vaultIssuer" class="form-control" placeholder="r...">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label"><strong>Release Date & Time</strong></label>
+              <input type="datetime-local" id="vaultReleaseTime" class="form-control">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label"><strong>Network RPC (WebSocket)</strong></label>
+              <select id="vaultRpc" class="form-select">
+                <option value="wss://s1.ripple.com">Mainnet (wss://s1.ripple.com)</option>
+                <option value="wss://s.altnet.rippletest.net:51233">Testnet (wss://s.altnet.rippletest.net)</option>
+              </select>
+            </div>
+          </div>
+          <div class="d-grid gap-2 d-md-flex mt-2">
+            <button id="startVaultBtn" class="btn btn-primary">
+              <i class="bi bi-play-circle"></i> Start Vault Monitor
+            </button>
+            <button id="stopVaultBtn" class="btn btn-danger" style="display: none;">
+              <i class="bi bi-stop-circle"></i> Stop Monitor
+            </button>
+          </div>
+          <div id="vaultLog" class="result-panel mt-3" style="display: none; height: 250px;"></div>
+        </div>
+      </div>
+
+      <!-- On-Chain Escrow Viewer Section -->
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">
+            <i class="bi bi-search section-icon"></i>
+            <a class="collapse-btn" data-bs-toggle="collapse" href="#escrowViewerSection">
+              On-Chain Escrow Viewer
+            </a>
+          </h5>
+        </div>
+        <div class="card-body collapse" id="escrowViewerSection">
+          <div class="input-group mb-3">
+            <input type="text" id="escrowAccountInput" class="form-control" placeholder="Enter XRPL Account (rAddress) to scan...">
+            <button class="btn btn-primary" id="fetchEscrowsBtn" type="button">
+              <i class="bi bi-search"></i> Scan Ledger
+            </button>
+          </div>
+          <div id="escrowViewerContainer"></div>
+        </div>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Escrow info modal -->
+    <div class="modal fade" id="escrowInfoModal" tabindex="-1" aria-labelledby="escrowInfoModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="escrowInfoModalLabel">Escrow Type Help</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <ul class="list-group list-group-flush">
+              <li class="list-group-item"><strong>Timed Escrow Create</strong> — create an escrow that releases funds automatically after a specific future date.</li>
+              <li class="list-group-item"><strong>Conditional Escrow Create</strong> — create an escrow that only releases funds when a required condition is fulfilled.</li>
+              <li class="list-group-item"><strong>Oracle Price Threshold</strong> — create a price-based escrow using a token pair and target price to derive the release condition.</li>
+              <li class="list-group-item"><strong>Escrow Finish</strong> — finish or release an existing escrow by providing the owner, sequence, and fulfillment details.</li>
+              <li class="list-group-item"><strong>Token Payment</strong> — send issued tokens or amounts to a destination account.</li>
+              <li class="list-group-item"><strong>Trustline</strong> — establish a trust line for an issued token from a specific issuer.</li>
+              <li class="list-group-item"><strong>Issue Token</strong> — issue a token payment from the issuer account to a recipient.</li>
+            </ul>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Welcome Modal -->
+    <div class="modal fade" id="welcomeModal" tabindex="-1" aria-labelledby="welcomeModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="welcomeModalLabel"><i class="bi bi-shield-lock"></i> Welcome to Just a Chill Escrow</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="text-center mb-4">
+              <i class="bi bi-safe text-primary" style="font-size: 4rem;"></i>
+              <h4 class="mt-2">Self-Custodial Smart Contracts</h4>
+              <p class="text-muted">Create, manage, and batch XRPL escrows securely using the Xaman wallet. Your keys never leave your device.</p>
+            </div>
+            <div class="row g-4">
+              <div class="col-md-4 text-center">
+                <i class="bi bi-file-earmark-text fs-1 text-info mb-2"></i>
+                <h6>1. Pick a Template</h6>
+                <p class="small text-muted">Choose from time-locked, conditional, or token escrows to fit your needs.</p>
+              </div>
+              <div class="col-md-4 text-center">
+                <i class="bi bi-ui-checks fs-1 text-success mb-2"></i>
+                <h6>2. Fill the Details</h6>
+                <p class="small text-muted">Enter amounts, addresses, and conditions. Use our tools to look up tokens and estimate fees.</p>
+              </div>
+              <div class="col-md-4 text-center">
+                <i class="bi bi-phone-vibrate fs-1 text-primary mb-2"></i>
+                <h6>3. Sign Securely</h6>
+                <p class="small text-muted">Review the summary and sign via Push Notification or QR code with Xaman.</p>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer justify-content-center">
+            <button type="button" class="btn btn-primary px-5" data-bs-dismiss="modal">Let's Get Started</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Token Search Modal -->
+    <div class="modal fade" id="tokenSearchModal" tabindex="-1" aria-labelledby="tokenSearchModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="tokenSearchModalLabel"><i class="bi bi-search"></i> Lookup Token (xrplmeta.org)</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="input-group mb-3">
+              <input type="text" id="tokenSearchInput" class="form-control" placeholder="Search by currency code (e.g. USD, xSPECTAR) or name...">
+              <button class="btn btn-primary" type="button" id="tokenSearchActionBtn">Search</button>
+            </div>
+            <div id="tokenSearchResults" class="list-group shadow-sm">
+               <div class="text-center text-muted small p-3">Enter a token name or currency code above to search public directories.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Transaction Submitted Modal -->
+    <div class="modal fade" id="txSubmittedModal" tabindex="-1" aria-labelledby="txSubmittedModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header bg-success text-white">
+            <h5 class="modal-title" id="txSubmittedModalLabel"><i class="bi bi-send-check"></i> Transaction Created</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" onclick="stopPayloadPolling()"></button>
+          </div>
+          <div class="modal-body" id="txSubmittedModalBody">
+            <!-- Dynamic content will be injected here -->
+          </div>
+          <div class="modal-footer bg-light border-0">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" onclick="stopPayloadPolling()">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/xrpl@2.11.0/build/xrpl-latest-min.js"></script>
+    <script src="/static/app.js?v=1.1"></script>
+  </body>
+</html>
