@@ -87,10 +87,7 @@ XUMM_KEY = os.getenv("XUMM_API_KEY")
 XUMM_SECRET = os.getenv("XUMM_API_SECRET")
 
 if not XUMM_KEY or not XUMM_SECRET:
-    raise RuntimeError(
-        "CRITICAL STARTUP ERROR: XUMM_API_KEY and XUMM_API_SECRET environment variables are missing. "
-        "Please set them in your .env file or host environment to start the application."
-    )
+    print("WARNING: XUMM_API_KEY and/or XUMM_API_SECRET environment variables are missing. Endpoints will return 501 until configured.")
 XUMM_WEBHOOK_URL = os.getenv("XUMM_WEBHOOK_URL")
 XUMM_WEBHOOK_SECRET = os.getenv("XUMM_WEBHOOK_SECRET")
 ALLOWED_ORIGINS_STR = os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000")
@@ -202,7 +199,8 @@ async def pydantic_validation_exception_handler(request: Request, exc: Validatio
     )
 
 static_dir = os.path.join(BASE_DIR, "static")
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
+if os.path.isdir(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
 @app.get("/")
