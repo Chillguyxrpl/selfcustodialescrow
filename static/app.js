@@ -121,7 +121,11 @@ function updateTemplateList() {
   frag.appendChild(placeholder);
   
   const grid = document.getElementById('templateGrid');
-  if (grid) grid.innerHTML = '';
+  if (grid) {
+    grid.innerHTML = '';
+    // Change grid container layout to list-group style
+    grid.className = 'list-group list-group-flush border rounded shadow-sm overflow-hidden mt-2';
+  }
 
   for (const name of Object.keys(templates)) {
     if (name === 'issue_token' || name === 'trustline' || name === 'enable_token_escrows') {
@@ -136,34 +140,122 @@ function updateTemplateList() {
     frag.appendChild(opt);
 
     if (grid && name !== 'escrow_finish' && name !== 'escrow_cancel') {
-      const col = document.createElement('div');
-      col.className = 'col-6 col-md-6';
-      
-      const card = document.createElement('div');
-      card.className = 'card h-100 template-card text-center p-3 mb-0';
-      card.dataset.name = name;
+      const rowItem = document.createElement('div');
+      rowItem.className = 'list-group-item p-0 template-row border-bottom border-secondary-subtle';
+      rowItem.dataset.name = name;
 
+      // Header part of the row
+      const header = document.createElement('div');
+      header.className = 'd-flex align-items-center justify-content-between p-3';
+      header.style.cursor = 'pointer';
+      header.style.transition = 'background-color 0.2s';
+      
+      const leftPart = document.createElement('div');
+      leftPart.className = 'd-flex align-items-center gap-3';
+      
       const icon = document.createElement('i');
-      icon.className = `bi ${getTemplateIcon(name)} fs-2 mb-2 text-primary`;
+      icon.className = `bi ${getTemplateIcon(name)} fs-5 text-primary`;
       
-      const title = document.createElement('div');
-      title.className = 'fw-bold text-break';
-      title.style.fontSize = '0.85rem';
+      const title = document.createElement('span');
+      title.className = 'fw-bold text-dark-emphasis';
+      title.style.fontSize = '0.9rem';
       title.textContent = getFriendlyTemplateName(name, templates[name]);
+      
+      leftPart.appendChild(icon);
+      leftPart.appendChild(title);
+      
+      const rightPart = document.createElement('div');
+      rightPart.className = 'd-flex align-items-center gap-2';
+      
+      const actionBtn = document.createElement('button');
+      actionBtn.type = 'button';
+      actionBtn.className = 'btn btn-xs btn-outline-primary py-1 px-3';
+      actionBtn.innerHTML = 'Launch <i class="bi bi-chevron-right small"></i>';
+      actionBtn.style.fontSize = '0.72rem';
+      
+      rightPart.appendChild(actionBtn);
+      
+      header.appendChild(leftPart);
+      header.appendChild(rightPart);
+      rowItem.appendChild(header);
 
-      card.appendChild(icon);
-      card.appendChild(title);
+      // Collapsible content area for the fields under this row
+      const contentArea = document.createElement('div');
+      contentArea.className = 'fields-content-area px-3 pb-3';
+      contentArea.style.display = 'none';
+      rowItem.appendChild(contentArea);
 
-      card.addEventListener('click', () => {
-        document.querySelectorAll('.template-card').forEach(c => c.classList.remove('active-template'));
-        card.classList.add('active-template');
-        
-        sel.value = name;
-        debounceRenderFields();
+      // Hover effect on the header
+      header.addEventListener('mouseover', () => {
+        header.classList.add('bg-body-tertiary');
+      });
+      header.addEventListener('mouseout', () => {
+        header.classList.remove('bg-body-tertiary');
       });
 
-      col.appendChild(card);
-      grid.appendChild(col);
+      const handleRowActivation = () => {
+        // If already active, toggle collapse
+        const isCurrentlyActive = rowItem.classList.contains('active-template-row');
+        
+        // Deactivate all rows
+        document.querySelectorAll('.template-row').forEach(row => {
+          row.classList.remove('active-template-row');
+          const area = row.querySelector('.fields-content-area');
+          if (area) {
+            area.style.display = 'none';
+            area.innerHTML = '';
+          }
+          const btn = row.querySelector('button');
+          if (btn) {
+            btn.className = 'btn btn-xs btn-outline-primary py-1 px-3';
+            btn.innerHTML = 'Launch <i class="bi bi-chevron-right small"></i>';
+          }
+        });
+
+        if (isCurrentlyActive) {
+          // Deselect template
+          sel.value = '';
+          const buildPayloadBtn = document.getElementById('buildPayloadWrapper');
+          if (buildPayloadBtn) buildPayloadBtn.style.display = 'none';
+          return;
+        }
+
+        // Activate this row
+        rowItem.classList.add('active-template-row');
+        contentArea.style.display = 'block';
+        actionBtn.className = 'btn btn-xs btn-primary py-1 px-3';
+        actionBtn.innerHTML = 'Active <i class="bi bi-chevron-down small"></i>';
+
+        // Select the template value
+        sel.value = name;
+        
+        // Move common elements beneath this row's contentArea
+        const durationRow = document.getElementById('escrowDurationRow');
+        const templateFields = document.getElementById('templateFields');
+        const buildPayloadBtn = document.getElementById('buildPayloadWrapper');
+        const payloadResult = document.getElementById('payloadResult');
+        const payloadPollingStatus = document.getElementById('payloadPollingStatus');
+
+        if (durationRow) contentArea.appendChild(durationRow);
+        if (templateFields) contentArea.appendChild(templateFields);
+        if (buildPayloadBtn) {
+          buildPayloadBtn.style.display = 'block';
+          contentArea.appendChild(buildPayloadBtn);
+        }
+        if (payloadResult) contentArea.appendChild(payloadResult);
+        if (payloadPollingStatus) contentArea.appendChild(payloadPollingStatus);
+
+        // Render the fields inside templateFields
+        debounceRenderFields();
+      };
+
+      header.addEventListener('click', handleRowActivation);
+      actionBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleRowActivation();
+      });
+
+      grid.appendChild(rowItem);
     }
   }
 
@@ -1876,13 +1968,18 @@ window.editBatchItem = function(idx) {
   const sel = document.getElementById('templateSelect');
   if (sel) {
     sel.value = tx._templateName;
-    document.querySelectorAll('.template-card').forEach(c => {
-      c.classList.toggle('active-template', c.dataset.name === tx._templateName);
-    });
+    const targetRow = document.querySelector(`.template-row[data-name="${tx._templateName}"]`);
+    if (targetRow) {
+      const header = targetRow.querySelector('div');
+      if (header) {
+        header.click();
+      }
+    } else {
+      renderFields();
+    }
+  } else {
+    renderFields();
   }
-  
-  // Trigger fields render synchronously
-  renderFields();
 
   // Populate fields
   Object.keys(tx._formParams).forEach(key => {
@@ -3113,12 +3210,16 @@ function triggerEscrowAction(actionTemplate, escrow) {
   // 2. Select the template card visually
   const sel = document.getElementById('templateSelect');
   if (sel) sel.value = actionTemplate;
-  document.querySelectorAll('.template-card').forEach(c => {
-    c.classList.toggle('active-template', c.dataset.name === actionTemplate);
-  });
 
-  // 3. Render the fields
-  renderFields();
+  const targetRow = document.querySelector(`.template-row[data-name="${actionTemplate}"]`);
+  if (targetRow) {
+    const header = targetRow.querySelector('div');
+    if (header) {
+      header.click();
+    }
+  } else {
+    renderFields();
+  }
 
   // 4. Auto-fill what we know and smoothly scroll the user up
   setTimeout(() => {
