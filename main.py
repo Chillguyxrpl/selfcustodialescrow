@@ -194,7 +194,7 @@ async def add_security_headers(request: Request, call_next):
     # Content Security Policy restricts where resources can be loaded from, blocking inline scripts, eval, and unknown domain sources.
     csp = (
         "default-src 'self'; "
-        "script-src 'self' https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js https://cdn.jsdelivr.net/npm/xrpl@2.11.0/build/xrpl-latest-min.js; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js https://cdn.jsdelivr.net/npm/xrpl@2.11.0/build/xrpl-latest-min.js; "
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "img-src 'self' data: https:; "
         "font-src 'self' https://cdn.jsdelivr.net data:; "
