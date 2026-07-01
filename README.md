@@ -63,7 +63,7 @@ python start_ngrok.py
 
 Verifying webhooks
 
-- The server stores incoming webhook payloads in `xumm.db`.
+- The server stores incoming webhook payloads in the PostgreSQL database.
 - Use the UI at `http://localhost:8000` to build a payload; set the XUMM webhook in the console to point at your ngrok URL before creating the payload.
 - After XUMM posts updates to `/xumm/webhook`, verify by calling the verification endpoint (or use the UI):
 

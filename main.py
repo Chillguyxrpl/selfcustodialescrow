@@ -5,8 +5,10 @@ from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
+load_dotenv()
 import requests
 import psycopg2
+from psycopg2.pool import ThreadedConnectionPool
 import json
 import time
 import hmac
@@ -17,7 +19,7 @@ from datetime import datetime
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from html import escape
-from contextlib import closing
+from contextlib import closing, contextmanager
 from pydantic import ValidationError
 from typing import Dict, Any, List, Optional, Union
 
@@ -81,8 +83,6 @@ BASE_DIR = os.path.dirname(__file__)
 POSTGRES_URL = os.getenv("POSTGRES_URL")
 TEMPLATES_FILE = os.path.join(BASE_DIR, "templates.json")
 
-load_dotenv()
-
 XRPL_RPC = os.getenv("XRPL_RPC", "https://s1.ripple.com:51234/")
 XUMM_KEY = os.getenv("XUMM_API_KEY")
 XUMM_SECRET = os.getenv("XUMM_API_SECRET")
@@ -115,17 +115,54 @@ def create_requests_session() -> requests.Session:
 session = create_requests_session()
 
 
+# Keep the simple non-pooled connection function as a legacy option / fallback
 def get_db_connection():
     if not POSTGRES_URL:
         raise RuntimeError("POSTGRES_URL environment variable is not set. Please attach a Vercel Postgres database.")
     return psycopg2.connect(POSTGRES_URL)
+
+# Thread-safe Connection Pool Initialization
+db_pool = None
+
+def init_db_pool():
+    global db_pool
+    if not POSTGRES_URL:
+        print("Skipping DB pool initialization: POSTGRES_URL not set")
+        return
+    try:
+        # Create a thread-safe connection pool with 1 to 20 connections
+        db_pool = ThreadedConnectionPool(1, 20, POSTGRES_URL)
+        print("Database connection pool initialized successfully (minconn=1, maxconn=20).")
+    except Exception as e:
+        print(f"Database connection pool initialization failed: {e}")
+
+# Context manager to lease and return connections to/from the pool
+@contextmanager
+def get_db_conn():
+    if not POSTGRES_URL:
+        raise RuntimeError("POSTGRES_URL environment variable is not set. Please attach a Vercel Postgres database.")
+    
+    conn = None
+    try:
+        if db_pool is not None:
+            conn = db_pool.getconn()
+        else:
+            conn = psycopg2.connect(POSTGRES_URL)
+        yield conn
+    finally:
+        if conn is not None:
+            if db_pool is not None:
+                db_pool.putconn(conn)
+            else:
+                conn.close()
 
 def init_db():
     if not POSTGRES_URL:
         print("Skipping DB init: POSTGRES_URL not set")
         return
     try:
-        with closing(get_db_connection()) as conn:
+        init_db_pool()
+        with get_db_conn() as conn:
             with conn.cursor() as c:
                 c.execute("""
                 CREATE TABLE IF NOT EXISTS payloads (
@@ -154,10 +191,10 @@ app.add_middleware(
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
-    # Content Security Policy restricts where resources can be loaded from
+    # Content Security Policy restricts where resources can be loaded from, blocking inline scripts, eval, and unknown domain sources.
     csp = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com; "
+        "script-src 'self' https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js https://cdn.jsdelivr.net/npm/xrpl@2.11.0/build/xrpl-latest-min.js; "
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "img-src 'self' data: https:; "
         "font-src 'self' https://cdn.jsdelivr.net data:; "
@@ -506,12 +543,52 @@ def check_issuer_status(request: Request, account: str):
             account_data = result.get("account_data", {})
             flags = account_data.get("Flags", 0)
             
-            LSF_ALLOW_TRUSTLINE_LOCKING = 0x80000000  # Adjust bitmask if necessary based on final TokenEscrow spec
+            LSF_ALLOW_TRUSTLINE_LOCKING = 0x40000000  # Corrected bitmask based on final TokenEscrow spec (0x40000000 / 1073741824)
             escrows_enabled = bool(int(flags) & LSF_ALLOW_TRUSTLINE_LOCKING)
             
             return {"account": account, "escrows_enabled": escrows_enabled}
         else:
             raise HTTPException(status_code=r.status_code, detail="XRPL node account_info request failed.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/xumm/history")
+def get_payload_history(request: Request, account: str = None):
+    """Retrieve signature payload history from the local DB, optionally filtered by account."""
+    if not POSTGRES_URL:
+        return JSONResponse(content=[])
+    
+    query = "SELECT uuid, response, status, created_at FROM payloads"
+    params = []
+    
+    if account:
+        account = account.strip()
+        query += " WHERE response LIKE %s"
+        params.append(f"%{account}%")
+        
+    query += " ORDER BY created_at DESC LIMIT 50"
+    
+    try:
+        with get_db_conn() as conn:
+            with conn.cursor() as c:
+                c.execute(query, params)
+                rows = c.fetchall()
+                
+        history = []
+        for r in rows:
+            uuid, response_str, status, created_at = r
+            try:
+                response_json = json.loads(response_str) if response_str else {}
+            except Exception:
+                response_json = {}
+            history.append({
+                "uuid": uuid,
+                "response": response_json,
+                "status": status or "unknown",
+                "created_at": created_at
+            })
+        return JSONResponse(content=history)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -773,7 +850,14 @@ def estimate_fee(request: Request, tx: AnyXRPLTransaction):
             if tx_dict.get("TransactionType") == "Batch":
                 multiplier += len(tx_dict.get("Transactions", []))
                 
-            return {"estimated_fee_drops": str(open_ledger_fee * multiplier)}
+            estimated_fee = open_ledger_fee * multiplier
+            
+            # Add extra fee for EscrowFinish with Fulfillment (10 drops per 16 bytes of fulfillment)
+            if tx_dict.get("TransactionType") == "EscrowFinish" and tx_dict.get("Fulfillment"):
+                fulfillment_bytes = len(tx_dict["Fulfillment"]) // 2
+                estimated_fee += open_ledger_fee * (fulfillment_bytes // 16)
+                
+            return {"estimated_fee_drops": str(estimated_fee)}
         else:
             raise HTTPException(status_code=r.status_code, detail="XRPL node fee estimation failed.")
     except Exception as e:
@@ -799,8 +883,9 @@ def compute_signature(secret: str, payload_bytes: bytes) -> dict:
 
 
 def verify_xumm_signature(headers, payload_bytes: bytes) -> bool:
-    secret = XUMM_WEBHOOK_SECRET or XUMM_SECRET
+    secret = XUMM_WEBHOOK_SECRET
     if not secret:
+        print("WARNING: XUMM_WEBHOOK_SECRET environment variable is missing. Webhook signature verification will fail.")
         return False
 
     signature = (headers.get("X-Xumm-Signature") or headers.get("x-xumm-signature")
@@ -845,7 +930,7 @@ def store_payload_with_retries(uuid: str, body: dict, max_attempts: int = 5):
     status = simplify_state(body) or "unknown"
     while attempt < max_attempts:
         try:
-            with closing(get_db_connection()) as conn:
+            with get_db_conn() as conn:
                 with conn.cursor() as c:
                     c.execute("""
                         INSERT INTO payloads (uuid, response, status, created_at) 
@@ -867,7 +952,7 @@ def load_local_payload(uuid: str):
     if not POSTGRES_URL:
         return None
     try:
-        with closing(get_db_connection()) as conn:
+        with get_db_conn() as conn:
             with conn.cursor() as c:
                 c.execute("SELECT response, status, created_at FROM payloads WHERE uuid = %s", (uuid,))
                 row = c.fetchone()
@@ -993,12 +1078,17 @@ def create_xumm_payload(request: Request, payload: XummPayloadRequest):
 
 
 @app.post("/xumm/webhook")
-async def xumm_webhook(request: Request):
+def xumm_webhook(request: Request):
     """XUMM will POST payload updates here if you configure a webhook URL.
 
     This endpoint stores the payload body in the local DB keyed by `uuid`.
     """
-    raw_body = await request.body()
+    import asyncio
+    try:
+        raw_body = asyncio.run(request.body())
+    except RuntimeError:
+        loop = asyncio.get_event_loop()
+        raw_body = loop.run_until_complete(request.body())
     
     # Security Enhancement: Strictly enforce webhook signature verification
     if not (XUMM_WEBHOOK_SECRET or XUMM_SECRET):

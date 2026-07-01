@@ -15,11 +15,11 @@ from decimal import Decimal
 # TYPE CONSTRAINTS
 # ============================================================================
 
-# XRPL addresses must start with 'r' and be 25-34 characters (including checksum)
+# XRPL addresses must start with 'r' and be 25-35 characters (including checksum)
 XRPLAddress = Annotated[str, Field(
     min_length=25,
-    max_length=34,
-    pattern=r"^r[1-9A-HJ-NP-Za-km-z]{24,33}$",
+    max_length=35,
+    pattern=r"^r[1-9A-HJ-NP-Za-km-z]{24,34}$",
     description="Valid XRPL account address (r-address with checksum)"
 )]
 

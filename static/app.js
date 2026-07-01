@@ -20,8 +20,8 @@ function isValidXRPLAddressFormat(address) {
   return typeof address === 'string' && 
          address.startsWith('r') && 
          address.length >= 25 && 
-         address.length <= 34 && 
-         /^r[1-9A-HJ-NP-Za-km-z]{24,33}$/.test(address);
+         address.length <= 35 && 
+         /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(address);
 }
 
 // Show validation indicator and add to localStorage for address history
@@ -520,7 +520,7 @@ function renderFields() {
       const typeSelect = document.createElement('select');
       typeSelect.className = 'form-select mb-2';
       typeSelect.id = 'field_AMOUNT_TYPE';
-      typeSelect.innerHTML = '<option value="XRP">XRP (Native)</option><option value="TOKEN">Issued Token (IOU)</option>';
+      typeSelect.innerHTML = '<option value="XRP">XRP (Native)</option><option value="TOKEN">Issued Token (IOU)</option><option value="MPT">Multi-Purpose Token (MPT)</option>';
       col.appendChild(typeSelect);
 
       const xrpGroup = document.createElement('div');
@@ -613,15 +613,48 @@ function renderFields() {
       tokenGroup.appendChild(tokenSearchCol);
       col.appendChild(tokenGroup);
 
+      const mptGroup = document.createElement('div');
+      mptGroup.className = 'mpt-group row g-2';
+      mptGroup.style.display = 'none';
+
+      const mptValCol = document.createElement('div');
+      mptValCol.className = 'col-md-4';
+      const mptValInput = document.createElement('input');
+      mptValInput.type = 'text';
+      mptValInput.className = 'form-control';
+      mptValInput.placeholder = 'MPT Amount (Integer)';
+      mptValCol.appendChild(mptValInput);
+
+      const mptIdCol = document.createElement('div');
+      mptIdCol.className = 'col-md-8';
+      const mptIdInput = document.createElement('input');
+      mptIdInput.type = 'text';
+      mptIdInput.className = 'form-control';
+      mptIdInput.id = 'field_AMOUNT_MPT_ID';
+      mptIdInput.placeholder = 'MPT Issuance ID';
+      mptIdCol.appendChild(mptIdInput);
+
+      mptGroup.appendChild(mptValCol);
+      mptGroup.appendChild(mptIdCol);
+      col.appendChild(mptGroup);
+
       const syncAmount = () => {
         if (typeSelect.value === 'XRP') {
           hiddenInput.value = xrpInput.value.trim();
-        } else {
+        } else if (typeSelect.value === 'TOKEN') {
           const val = tokenValInput.value.trim();
           const cur = formatCurrencyCode(tokenCurInput.value.trim()); // Enforce XRPL format immediately
           const iss = tokenIssInput.value.trim();
           if (val || cur || iss) {
             hiddenInput.value = JSON.stringify({ value: val, currency: cur, issuer: iss });
+          } else {
+            hiddenInput.value = '';
+          }
+        } else if (typeSelect.value === 'MPT') {
+          const val = mptValInput.value.trim();
+          const mptId = mptIdInput.value.trim();
+          if (val || mptId) {
+            hiddenInput.value = JSON.stringify({ amount: val, mpt_issuance_id: mptId });
           } else {
             hiddenInput.value = '';
           }
@@ -632,9 +665,15 @@ function renderFields() {
         if (typeSelect.value === 'XRP') {
           xrpGroup.style.display = 'block';
           tokenGroup.style.display = 'none';
-        } else {
+          mptGroup.style.display = 'none';
+        } else if (typeSelect.value === 'TOKEN') {
           xrpGroup.style.display = 'none';
           tokenGroup.style.display = 'flex';
+          mptGroup.style.display = 'none';
+        } else if (typeSelect.value === 'MPT') {
+          xrpGroup.style.display = 'none';
+          tokenGroup.style.display = 'none';
+          mptGroup.style.display = 'flex';
         }
         syncAmount();
       });
@@ -643,8 +682,10 @@ function renderFields() {
       tokenValInput.addEventListener('input', syncAmount);
       tokenCurInput.addEventListener('input', syncAmount);
       tokenIssInput.addEventListener('input', syncAmount);
+      mptValInput.addEventListener('input', syncAmount);
+      mptIdInput.addEventListener('input', syncAmount);
 
-      [xrpInput, tokenValInput, tokenCurInput, tokenIssInput].forEach(inp => {
+      [xrpInput, tokenValInput, tokenCurInput, tokenIssInput, mptValInput, mptIdInput].forEach(inp => {
         if (!inp) return;
         
         // Real-time validation as user types
@@ -675,6 +716,18 @@ function renderFields() {
               showValidCheck(inp);
             }
           }
+          // Validate MPT ID
+          else if (inp === mptIdInput && inp.value.trim()) {
+            inp.classList.add('is-valid');
+            showValidCheck(inp);
+          }
+          // Validate MPT Amount
+          else if (inp === mptValInput && inp.value.trim()) {
+            if (/^\d+$/.test(inp.value.trim()) && parseInt(inp.value) >= 0) {
+              inp.classList.add('is-valid');
+              showValidCheck(inp);
+            }
+          }
         });
         
         inp.addEventListener('blur', () => {
@@ -689,7 +742,7 @@ function renderFields() {
               xrpInput.classList.add('is-invalid');
               setFieldError(xrpInput, 'Amount must be a positive integer (drops).');
             }
-          } else {
+          } else if (typeSelect.value === 'TOKEN') {
             [tokenValInput, tokenCurInput, tokenIssInput].forEach(ti => {
               if (!ti.value.trim()) {
                 ti.classList.add('is-invalid');
@@ -703,6 +756,19 @@ function renderFields() {
                   ti.classList.add('is-invalid');
                   setFieldError(ti, 'Invalid issuer address format.');
                 }
+              } else {
+                ti.classList.add('is-valid');
+                showValidCheck(ti);
+              }
+            });
+          } else if (typeSelect.value === 'MPT') {
+            [mptValInput, mptIdInput].forEach(ti => {
+              if (!ti.value.trim()) {
+                ti.classList.add('is-invalid');
+                setFieldError(ti, 'MPT details are required.');
+              } else if (ti === mptValInput && !/^\d+$/.test(ti.value.trim())) {
+                ti.classList.add('is-invalid');
+                setFieldError(ti, 'MPT amount must be a positive integer.');
               } else {
                 ti.classList.add('is-valid');
                 showValidCheck(ti);
@@ -1479,8 +1545,8 @@ function setSpinner(spinnerEl, active) {
 async function computeOracleCondition(tokenPair, targetPrice) {
   const encoder = new TextEncoder();
   const payload = `oracle:${tokenPair.trim().toUpperCase()}:${targetPrice.trim()}`;
-  const hashBuffer = await crypto.subtle.digest('SHA-512', encoder.encode(payload));
-  const hashBytes = new Uint8Array(hashBuffer).slice(0, 32);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(payload));
+  const hashBytes = new Uint8Array(hashBuffer);
   const hashHex = Array.from(hashBytes).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
   
   // XRPL requires PREIMAGE-SHA-256 conditions to follow the ILP Crypto-Condition format:
@@ -1561,6 +1627,7 @@ function startPayloadWebSocket(wsUrl, uuid) {
           console.error("Verification failed", e);
         }
         showAlert('Xaman payload was signed successfully.', 'success');
+        loadSignatureHistory();
         
         if (window.batchTransactions && window.batchTransactions.length > 0) {
           showAlert('Auto-advancing to next transaction in queue...', 'info');
@@ -1638,6 +1705,7 @@ async function pollPayloadStatus(uuid) {
           console.error("Verification failed", e);
         }
         showAlert('XUMM payload was signed successfully.', 'success');
+        loadSignatureHistory();
         
         if (window.batchTransactions && window.batchTransactions.length > 0) {
           showAlert('Auto-advancing to next transaction in queue...', 'info');
@@ -1947,20 +2015,26 @@ async function getFormTxJson(isForBatch = false) {
         if (key !== 'AMOUNT') {
           setFieldError(i, `${getFriendlyFieldLabel(key)} is required.`);
         } else {
-          // Handle highlighting the custom dynamic Amount inputs
-          const typeSel = i.nextElementSibling;
-          if (typeSel && typeSel.tagName === 'SELECT') {
+          // Handle highlighting the custom dynamic Amount inputs using robust class selectors
+          const parent = i.parentNode;
+          const typeSel = parent.querySelector('#field_AMOUNT_TYPE');
+          if (typeSel) {
             if (typeSel.value === 'TOKEN') {
-              const tokenGroup = typeSel.nextElementSibling?.nextElementSibling;
+              const tokenGroup = parent.querySelector('.token-group');
               if (tokenGroup) tokenGroup.querySelectorAll('input').forEach(ti => { 
                 if (!ti.value.trim() && ti.type !== 'hidden') setFieldError(ti, 'Token details are required.');
               });
             } else if (typeSel.value === 'XRP') {
-              const xrpGroup = typeSel.nextElementSibling;
+              const xrpGroup = parent.querySelector('.xrp-group');
               if (xrpGroup) { 
                 const xInp = xrpGroup.querySelector('input'); 
                 if (xInp && !xInp.value.trim()) setFieldError(xInp, 'XRP amount is required.');
               }
+            } else if (typeSel.value === 'MPT') {
+              const mptGroup = parent.querySelector('.mpt-group');
+              if (mptGroup) mptGroup.querySelectorAll('input').forEach(ti => { 
+                if (!ti.value.trim() && ti.type !== 'hidden') setFieldError(ti, 'MPT details are required.');
+              });
             }
           }
         }
@@ -2356,10 +2430,6 @@ document.getElementById('buildPayload').addEventListener('click', async (e) => {
         showAlert('Push notification sent! Check your device.', 'success');
       } else {
         showAlert(`Push notification failed to deliver. Please scan the QR code to continue.`, 'warning');
-        
-        // Clear stale connection so user is forced to reconnect next time
-        const disconnectBtn = document.getElementById('disconnectBtn');
-        if (disconnectBtn) disconnectBtn.click();
       }
 
       const txModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('txSubmittedModal'));
@@ -2513,6 +2583,7 @@ function startSignInPolling(uuid, originalHtml) {
             showAlert(`Successfully connected: ${account}`, 'success');
             
             updateXamanUI(account);
+            loadSignatureHistory();
             
             // Auto-fill active escrow viewer if empty and trigger a scan
             const escrowAccountInput = document.getElementById('escrowAccountInput');
@@ -2638,10 +2709,6 @@ if (connectXamanBtnEl) {
           showAlert(`Push notification sent! Check your device to enable escrows.<br><span class="small">Didn't receive it? <a href="${data.next.always}" target="_blank">Open Xaman Manually</a></span>`, 'success', true);
         } else {
           showAlert(`Push notification failed to deliver.<br><img src="${data.refs.qr_png}" class="mt-2 mb-2 rounded shadow-sm d-block mx-auto" style="max-width: 150px;"><div class="text-center"><a href="${data.next.always}" target="_blank" class="alert-link small">Or click here to open Xaman</a></div>`, 'warning', true);
-          
-          // Clear stale connection so user is forced to reconnect next time
-          const disconnectBtn = document.getElementById('disconnectBtn');
-          if (disconnectBtn) disconnectBtn.click();
         }
         if (data.refs && data.refs.websocket_status) {
           startPayloadWebSocket(data.refs.websocket_status, data.uuid);
@@ -2862,10 +2929,6 @@ async function executeDirectEscrowAction(action, escrow) {
         showAlert(`Push notification sent! Check your device to sign.<br><span class="small">Didn't receive it? <a href="${data.next.always}" target="_blank">Open Xaman Manually</a></span>`, 'success', true);
       } else {
         showAlert(`Push notification failed to deliver.<br><img src="${data.refs.qr_png}" class="mt-2 mb-2 rounded shadow-sm d-block mx-auto" style="max-width: 150px;"><div class="text-center"><a href="${data.next.always}" target="_blank" class="alert-link small">Or click here to open Xaman</a></div>`, 'warning', true);
-        
-        // Clear stale connection so user is forced to reconnect next time
-        const disconnectBtn = document.getElementById('disconnectBtn');
-        if (disconnectBtn) disconnectBtn.click();
       }
       if (data.refs && data.refs.websocket_status) {
         startPayloadWebSocket(data.refs.websocket_status, data.uuid);
@@ -3327,3 +3390,200 @@ if (startVaultBtnEl) {
 
 const stopVaultBtnEl = document.getElementById('stopVaultBtn');
 if (stopVaultBtnEl) stopVaultBtnEl.addEventListener('click', stopVault);
+
+
+// =============================================================================
+// 🔑 CRYPTOGRAPHIC CONDITION & FULFILLMENT GENERATOR HELPERS
+// =============================================================================
+
+function encodeDerLength(len) {
+  if (len < 128) {
+    return [len];
+  } else if (len < 256) {
+    return [0x81, len];
+  } else {
+    return [0x82, (len >> 8) & 0xff, len & 0xff];
+  }
+}
+
+function encodeUnsignedInt(val) {
+  const bytes = [];
+  if (val === 0) {
+    bytes.push(0);
+  } else {
+    while (val > 0) {
+      bytes.unshift(val & 0xff);
+      val = val >> 8;
+    }
+  }
+  return bytes;
+}
+
+async function generateConditionAndFulfillment(preimage) {
+  const encoder = new TextEncoder();
+  const preimageBytes = encoder.encode(preimage);
+  
+  // 1. Calculate standard SHA-256 hash matching XRPL consensus verification
+  const hashBuffer = await crypto.subtle.digest('SHA-256', preimageBytes);
+  const hashBytes = new Uint8Array(hashBuffer);
+  
+  // 2. Generate ILP Crypto-Conditions ASN.1 DER Fulfillment (Type 0: Preimage)
+  // Inner value structure: [0x80] + [length of preimage] + [preimage bytes]
+  const innerFulfill = [0x80, ...encodeDerLength(preimageBytes.length), ...preimageBytes];
+  // Outer value structure: [0xA0] (constructed type 0) + [length of inner] + [inner bytes]
+  const fulfillBytes = [0xA0, ...encodeDerLength(innerFulfill.length), ...innerFulfill];
+  const fulfillHex = Array.from(fulfillBytes).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+  
+  // 3. Generate ILP Crypto-Conditions ASN.1 DER Condition (Type 0: Preimage)
+  // Cost (preimage size) encoded as minimal unsigned big-endian integer bytes
+  const costBytes = encodeUnsignedInt(preimageBytes.length);
+  // Cost block structure: [0x81] + [length of cost] + [cost bytes]
+  const costBlock = [0x81, ...encodeDerLength(costBytes.length), ...costBytes];
+  // Hash block structure: [0x80] + [0x20] (32 bytes) + [32-byte SHA-256 fingerprint]
+  const hashBlock = [0x80, 0x20, ...hashBytes];
+  
+  const innerCond = [...hashBlock, ...costBlock];
+  // Outer value structure: [0xA0] + [length of inner] + [inner bytes]
+  const condBytes = [0xA0, ...encodeDerLength(innerCond.length), ...innerCond];
+  const condHex = Array.from(condBytes).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+  
+  return { condition: condHex, fulfillment: fulfillHex };
+}
+
+// Bind DOM event listeners for the generator card elements
+document.addEventListener('DOMContentLoaded', () => {
+  const btnGenRandom = document.getElementById('btnGenRandomPreimage');
+  const helperPreimage = document.getElementById('helperPreimage');
+  const btnGenCrypto = document.getElementById('btnGenerateCryptoData');
+  const derivedCondition = document.getElementById('derivedCondition');
+  const derivedFulfillment = document.getElementById('derivedFulfillment');
+
+  if (btnGenRandom && helperPreimage) {
+    btnGenRandom.addEventListener('click', () => {
+      const arr = new Uint8Array(16);
+      crypto.getRandomValues(arr);
+      const randStr = Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+      helperPreimage.value = `secret:${randStr}`;
+    });
+  }
+
+  if (btnGenCrypto && helperPreimage && derivedCondition && derivedFulfillment) {
+    btnGenCrypto.addEventListener('click', async () => {
+      const preimage = helperPreimage.value.trim();
+      if (!preimage) {
+        showAlert('Please enter a secret preimage string.', 'warning');
+        return;
+      }
+      try {
+        const { condition, fulfillment } = await generateConditionAndFulfillment(preimage);
+        derivedCondition.value = condition;
+        derivedFulfillment.value = fulfillment;
+        showAlert('Successfully generated condition and fulfillment!', 'success');
+      } catch (err) {
+        showAlert('Error generating cryptographic values: ' + String(err), 'error');
+      }
+    });
+  }
+});
+
+
+// =============================================================================
+// 📜 SIGNATURE HISTORY (AUDIT LOG) HELPERS
+// =============================================================================
+
+async function loadSignatureHistory() {
+  const container = document.getElementById('signatureHistoryContainer');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div class="text-center p-3">
+      <span class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></span>
+      <span class="ms-1 small text-muted">Loading history...</span>
+    </div>
+  `;
+
+  let url = '/xumm/history';
+  if (window.connectedAccount) {
+    url += `?account=${encodeURIComponent(window.connectedAccount)}`;
+  }
+
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(await resp.text());
+    const data = await resp.json();
+
+    if (!data || data.length === 0) {
+      container.innerHTML = `<div class="text-center text-muted small p-3">No history records found${window.connectedAccount ? ' for this account' : ''}.</div>`;
+      return;
+    }
+
+    let html = '<div class="list-group list-group-flush shadow-sm rounded border">';
+    data.forEach(item => {
+      const response = item.response || {};
+      const status = item.status || 'unknown';
+      const uuid = item.uuid;
+      const createdAt = item.created_at ? new Date(item.created_at * 1000).toLocaleString() : 'Unknown Time';
+
+      const requestData = response.request || response.payloadResponse || {};
+      const txjson = requestData.txjson || response.remote?.request?.txjson || {};
+      const txType = txjson.TransactionType || 'SignIn';
+      
+      const payloadMeta = response.meta || {};
+      const isSigned = status === 'signed' || payloadMeta.signed === true || response.remote?.meta?.signed === true;
+      
+      const signer = response.response?.account || response.remote?.response?.account || txjson.Account || 'N/A';
+      
+      const txHash = response.remote?.xrpl_submission?.result?.tx_json?.hash || response.xrpl_submission?.result?.tx_json?.hash || response.response?.txid || '';
+
+      let statusBadge = '';
+      if (isSigned) {
+        statusBadge = '<span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 0.65rem;">Signed</span>';
+      } else if (status === 'rejected') {
+        statusBadge = '<span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 0.65rem;">Rejected</span>';
+      } else if (status === 'expired') {
+        statusBadge = '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle" style="font-size: 0.65rem;">Expired</span>';
+      } else {
+        statusBadge = '<span class="badge bg-info-subtle text-info border border-info-subtle" style="font-size: 0.65rem;">Pending</span>';
+      }
+
+      html += `
+        <div class="list-group-item p-3">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <h6 class="mb-0 fw-bold text-primary small" style="font-size: 0.8rem;"><i class="bi bi-file-earmark-code"></i> ${escapeHtml(txType)}</h6>
+            ${statusBadge}
+          </div>
+          <div class="small text-muted mb-1" style="font-size: 0.72rem;">
+            <strong>Signer:</strong> <code>${escapeHtml(signer)}</code>
+          </div>
+          <div class="small text-muted mb-1" style="font-size: 0.72rem;">
+            <strong>UUID:</strong> <code>${escapeHtml(uuid)}</code>
+          </div>
+          <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top" style="font-size: 0.7rem;">
+            <span class="text-secondary">${escapeHtml(createdAt)}</span>
+            ${txHash ? `
+              <div class="d-flex gap-1">
+                <a href="https://testnet.xrpl.org/transactions/${txHash}" target="_blank" class="btn btn-xs btn-outline-info py-0 px-1" style="font-size: 0.65rem;">Testnet</a>
+                <a href="https://livenet.xrpl.org/transactions/${txHash}" target="_blank" class="btn btn-xs btn-outline-primary py-0 px-1" style="font-size: 0.65rem;">Mainnet</a>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div class="alert alert-danger small p-2 m-2">Error loading history: ${escapeHtml(err.message || String(err))}</div>`;
+  }
+}
+
+// Bind DOM event listeners for the history refresh button
+document.addEventListener('DOMContentLoaded', () => {
+  const btnRefreshHistory = document.getElementById('btnRefreshHistory');
+  if (btnRefreshHistory) {
+    btnRefreshHistory.addEventListener('click', loadSignatureHistory);
+  }
+  
+  // Load history initially on page load
+  setTimeout(loadSignatureHistory, 1000);
+});
