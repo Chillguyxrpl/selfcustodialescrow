@@ -243,12 +243,12 @@ if os.path.isdir(static_dir):
 
 @app.get("/")
 def index():
-    return FileResponse(os.path.join(static_dir, "index.html"))
+    return FileResponse(os.path.join(static_dir, "index.html"), headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"})
 
 
 @app.get("/app.js")
 def get_app_js():
-    return FileResponse(os.path.join(static_dir, "app.js"))
+    return FileResponse(os.path.join(static_dir, "app.js"), headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"})
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -547,6 +547,27 @@ def check_issuer_status(request: Request, account: str):
             escrows_enabled = bool(int(flags) & LSF_ALLOW_TRUSTLINE_LOCKING)
             
             return {"account": account, "escrows_enabled": escrows_enabled}
+        else:
+            raise HTTPException(status_code=r.status_code, detail="XRPL node account_info request failed.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/account_info/{account}")
+def get_account_info(request: Request, account: str):
+    """Fetch general account information and balance from the XRPL."""
+    account = account.strip()
+    if not is_valid_xrpl_address(account):
+        raise HTTPException(status_code=400, detail="Invalid account address format. Must be a valid XRPL r-address with a correct checksum.")
+    
+    rpc_req = {"method": "account_info", "params": [{"account": account, "ledger_index": "validated"}]}
+    try:
+        r = requests.post(XRPL_RPC, json=rpc_req, timeout=10)
+        if r.status_code == 200:
+            res = r.json().get("result", {})
+            if "error" in res:
+                return JSONResponse(status_code=404, content={"detail": res.get("error_message", res.get("error"))})
+            return res.get("account_data", {})
         else:
             raise HTTPException(status_code=r.status_code, detail="XRPL node account_info request failed.")
     except Exception as e:

@@ -2823,6 +2823,61 @@ document.getElementById('buildPayload').addEventListener('click', async (e) => {
   }
 });
 
+async function updateDashboard(account) {
+  const dashDisconnected = document.getElementById('dashboard-disconnected');
+  const dashConnected = document.getElementById('dashboard-connected');
+  const dashAccountAddr = document.getElementById('dashboard-account-address');
+  const dashBalance = document.getElementById('dashboard-balance');
+  const dashEscrowsCount = document.getElementById('dashboard-active-escrows-count');
+  const dashEscrowsContainer = document.getElementById('dashboardEscrowsContainer');
+
+  if (!account) {
+    if (dashDisconnected) dashDisconnected.style.display = 'block';
+    if (dashConnected) dashConnected.style.display = 'none';
+    return;
+  }
+
+  if (dashDisconnected) dashDisconnected.style.display = 'none';
+  if (dashConnected) dashConnected.style.display = 'block';
+  if (dashAccountAddr) dashAccountAddr.textContent = account;
+
+  // 1. Fetch balance from endpoint
+  try {
+    const res = await fetch(`/account_info/${encodeURIComponent(account)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.Balance) {
+        const xrp = Number(data.Balance) / 1000000;
+        if (dashBalance) dashBalance.textContent = `${xrp.toLocaleString(undefined, { maximumFractionDigits: 4 })} XRP`;
+      }
+    } else {
+      if (dashBalance) dashBalance.textContent = 'Unfunded Wallet';
+    }
+  } catch (err) {
+    console.error("Error fetching account balance:", err);
+    if (dashBalance) dashBalance.textContent = 'Error Loading';
+  }
+
+  // 2. Fetch and render active escrows on dashboard
+  if (dashEscrowsContainer) {
+    dashEscrowsContainer.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Scanning ledger...</div>';
+    try {
+      const escrows = await fetchActiveEscrows(account);
+      dashEscrowsContainer.innerHTML = '';
+      if (dashEscrowsCount) dashEscrowsCount.textContent = escrows.length;
+      
+      if (escrows.length === 0) {
+        dashEscrowsContainer.innerHTML = '<div class="alert alert-info mb-0">No active escrows found for your account on the ledger.</div>';
+        return;
+      }
+      
+      await renderActiveEscrows(account, dashEscrowsContainer);
+    } catch (err) {
+      dashEscrowsContainer.innerHTML = '<div class="alert alert-danger mb-0">Error scanning escrows.</div>';
+    }
+  }
+}
+
 function updateXamanUI(account) {
   if (!connectXamanBtnEl) return;
   connectXamanBtnEl.innerHTML = `<i class="bi bi-person-check"></i> ${account.substring(0, 6)}...${account.substring(account.length - 4)}`;
@@ -2861,14 +2916,19 @@ function updateXamanUI(account) {
       connectXamanBtnEl.disabled = false;
       document.getElementById('copyAddressBtn')?.remove();
       disconnectBtn.remove();
+      updateDashboard(null);
     });
     const copyBtnNode = document.getElementById('copyAddressBtn');
     connectXamanBtnEl.parentNode.insertBefore(disconnectBtn, copyBtnNode.nextSibling);
   }
+
+  updateDashboard(account);
 }
 
 if (window.connectedAccount) {
   updateXamanUI(window.connectedAccount);
+} else {
+  updateDashboard(null);
 }
 
 // No wallet address input is shown; user fills required ACCOUNT fields in the selected escrow.
@@ -3197,6 +3257,13 @@ async function fetchActiveEscrows(account) {
 }
 
 function triggerEscrowAction(actionTemplate, escrow) {
+  // Switch to the Build Escrow tab if tab element exists
+  const buildTabBtn = document.getElementById('tab-build-btn');
+  if (buildTabBtn && window.bootstrap && window.bootstrap.Tab) {
+    const tab = window.bootstrap.Tab.getOrCreateInstance(buildTabBtn);
+    tab.show();
+  }
+
   // 1. Expand the templates section if it is collapsed
   const templatesSection = document.getElementById('templatesSection');
   if (templatesSection && !templatesSection.classList.contains('show')) {
@@ -3646,6 +3713,15 @@ document.addEventListener('DOMContentLoaded', () => {
   initTokenSearch();
   initDurationQuickSelect();
   
+  const btnRefreshDashboard = document.getElementById('btnRefreshDashboardEscrows');
+  if (btnRefreshDashboard) {
+    btnRefreshDashboard.addEventListener('click', () => {
+      if (window.connectedAccount) {
+        updateDashboard(window.connectedAccount);
+      }
+    });
+  }
+
   // Show welcome modal for first-time visitors
   if (!localStorage.getItem('hasSeenWelcome')) {
     const welcomeModalEl = document.getElementById('welcomeModal');
