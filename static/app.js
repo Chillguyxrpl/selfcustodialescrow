@@ -2871,7 +2871,7 @@ async function updateDashboard(account) {
         return;
       }
       
-      await renderActiveEscrows(account, dashEscrowsContainer);
+      await renderActiveEscrows(account, dashEscrowsContainer, escrows);
     } catch (err) {
       dashEscrowsContainer.innerHTML = '<div class="alert alert-danger mb-0">Error scanning escrows.</div>';
     }
@@ -3389,12 +3389,12 @@ async function executeDirectEscrowAction(action, escrow) {
   }
 }
 
-async function renderActiveEscrows(account, container) {
+async function renderActiveEscrows(account, container, preFetchedEscrows = null) {
   if (!container) return;
 
   container.innerHTML = '<div class="text-center my-3"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Scanning ledger...</div>';
   
-  const escrows = await fetchActiveEscrows(account);
+  const escrows = preFetchedEscrows || await fetchActiveEscrows(account);
   container.innerHTML = '';
 
   if (escrows.length === 0) {
