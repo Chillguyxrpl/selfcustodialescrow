@@ -3219,7 +3219,7 @@ async function refreshEscrowUI(activeEscrows) {
         claimBtn.innerHTML = '<i class="bi bi-unlock me-1"></i> Claim';
       } else {
         claimBtn.disabled = true;
-        claimBtn.className = 'btn btn-outline-secondary btn-sm me-2 opacity-50';
+        claimBtn.className = 'btn btn-sm border-0 bg-transparent text-secondary opacity-35 me-2';
         claimBtn.innerHTML = '<i class="bi bi-lock me-1"></i> Claim';
       }
     }
@@ -3230,7 +3230,7 @@ async function refreshEscrowUI(activeEscrows) {
         cancelBtn.innerHTML = '<i class="bi bi-x-octagon me-1"></i> Cancel';
       } else {
         cancelBtn.disabled = true;
-        cancelBtn.className = 'btn btn-outline-secondary btn-sm opacity-50';
+        cancelBtn.className = 'btn btn-sm border-0 bg-transparent text-secondary opacity-35';
         cancelBtn.innerHTML = '<i class="bi bi-lock me-1"></i> Cancel';
       }
     }
@@ -3435,7 +3435,14 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
     }
 
     const isIncoming = escrow.Account !== account && escrow.Destination === account;
-    const badgeHtml = isIncoming ? '<span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">Incoming</span>' : '<span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">Outgoing</span>';
+    const isSelf = escrow.Account === escrow.Destination;
+    
+    let badgeHtml = '';
+    if (isSelf) {
+      badgeHtml = '<span class="badge rounded-pill bg-info-subtle text-info border border-info-subtle px-2 py-1"><i class="bi bi-shield-lock-fill me-1"></i>Internal Vault</span>';
+    } else {
+      badgeHtml = isIncoming ? '<span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">Incoming</span>' : '<span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">Outgoing</span>';
+    }
 
     const getRelativeTimeHtml = (epochSeconds) => {
       if (!epochSeconds) return '';
@@ -3454,26 +3461,73 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
       else if (hours > 0) str += `${hours}h ${mins}m`;
       else str += `${mins}m`;
       
-      return `<span class="text-muted fw-medium">${str}</span>`;
+      return `<span class="fw-medium">${str}</span>`;
     };
 
     let timeDetails = '<ul class="list-unstyled mb-0 small">';
     if (escrow.FinishAfter) {
-       timeDetails += `<li class="mb-2"><i class="bi bi-clock-history text-success me-2"></i><strong>Unlocks:</strong> ${formatTime(escrow.FinishAfter)} <span class="ms-1">(${getRelativeTimeHtml(escrow.FinishAfter)})</span></li>`;
+       timeDetails += `
+         <li class="mb-2 p-2 rounded bg-success-subtle text-success-emphasis border border-success-subtle d-flex align-items-center">
+           <i class="bi bi-unlock-fill me-2 fs-6"></i>
+           <div>
+             <strong>Unlocks:</strong> ${formatTime(escrow.FinishAfter)} 
+             <span class="ms-1 fw-bold">(${getRelativeTimeHtml(escrow.FinishAfter)})</span>
+           </div>
+         </li>`;
     }
     if (escrow.CancelAfter) {
-       timeDetails += `<li class="mb-2"><i class="bi bi-x-circle text-danger me-2"></i><strong>Expires:</strong> ${formatTime(escrow.CancelAfter)} <span class="ms-1">(${getRelativeTimeHtml(escrow.CancelAfter)})</span></li>`;
+       timeDetails += `
+         <li class="mb-2 p-2 rounded bg-warning-subtle text-warning-emphasis border border-warning-subtle d-flex align-items-center">
+           <i class="bi bi-hourglass-split me-2 fs-6"></i>
+           <div>
+             <strong>Expires:</strong> ${formatTime(escrow.CancelAfter)} 
+             <span class="ms-1 fw-bold">(${getRelativeTimeHtml(escrow.CancelAfter)})</span>
+           </div>
+         </li>`;
     }
     if (escrow.Condition) {
-       timeDetails += `<li><i class="bi bi-key text-warning me-2"></i><strong>Condition:</strong> <span class="badge bg-warning-subtle text-warning border border-warning-subtle">Fulfillment Required</span></li>`;
+       timeDetails += `
+         <li class="mb-2 p-2 rounded bg-info-subtle text-info-emphasis border border-info-subtle d-flex align-items-center">
+           <i class="bi bi-key-fill text-info me-2 fs-6"></i>
+           <div>
+             <strong>Condition:</strong> <span class="badge bg-info-subtle text-info border border-info-subtle">Fulfillment Required</span>
+           </div>
+         </li>`;
     }
     if (!escrow.FinishAfter && !escrow.CancelAfter && !escrow.Condition) {
-       timeDetails += `<li class="text-muted"><em>No time locks or conditions.</em></li>`;
+       timeDetails += `<li class="text-muted p-2"><em>No time locks or conditions.</em></li>`;
     }
     timeDetails += '</ul>';
 
     const copyBtn = (text, label) => `<i class="bi bi-copy text-muted" style="cursor: pointer; font-size: 0.9em; transition: opacity 0.2s;" onmouseover="this.style.opacity=0.7" onmouseout="this.style.opacity=1" onclick="copyToClipboard('${text}', '${label}')" title="Copy"></i>`;
     const shortIdx = escrow.index ? `${escrow.index.substring(0, 4)}...${escrow.index.substring(escrow.index.length - 4)}` : 'N/A';
+
+    let addressBlockHtml = '';
+    if (isSelf) {
+      addressBlockHtml = `
+        <div class="d-flex align-items-center justify-content-between mb-3 bg-light p-2 rounded border">
+          <div>
+            <span class="text-muted d-block fw-bold" style="font-size: 0.65rem; letter-spacing: 0.5px;">ACCOUNT (SELF-LOCKUP)</span>
+            <span class="font-monospace" title="${escrow.Account}">${shortenAddress(escrow.Account)}</span> ${copyBtn(escrow.Account, 'Account Address Copied!')}
+          </div>
+          <span class="badge rounded-pill bg-info-subtle text-info border border-info-subtle px-2 py-1"><i class="bi bi-shield-lock-fill me-1"></i>Internal Vault</span>
+        </div>
+      `;
+    } else {
+      addressBlockHtml = `
+        <div class="d-flex align-items-center flex-wrap mb-3 bg-light p-2 rounded border">
+          <div class="me-3">
+            <span class="text-muted d-block fw-bold" style="font-size: 0.65rem; letter-spacing: 0.5px;">FROM</span>
+            <span class="font-monospace" title="${escrow.Account}">${shortenAddress(escrow.Account)}</span> ${copyBtn(escrow.Account, 'Sender Address Copied!')}
+          </div>
+          <i class="bi bi-arrow-right text-muted me-3 fs-6"></i>
+          <div>
+            <span class="text-muted d-block fw-bold" style="font-size: 0.65rem; letter-spacing: 0.5px;">TO</span>
+            <span class="font-monospace" title="${escrow.Destination}">${shortenAddress(escrow.Destination)}</span> ${copyBtn(escrow.Destination, 'Recipient Address Copied!')}
+          </div>
+        </div>
+      `;
+    }
 
     const infoDiv = document.createElement('div');
     infoDiv.className = 'w-100 mb-3';
@@ -3482,17 +3536,7 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
         <h4 class="mb-0 fw-bold"><i class="bi bi-safe text-primary me-2"></i>${amountStr}</h4>
         <div>${badgeHtml}</div>
       </div>
-      <div class="d-flex align-items-center flex-wrap mb-3 bg-light p-2 rounded border">
-        <div class="me-3">
-          <span class="text-muted d-block fw-bold" style="font-size: 0.65rem; letter-spacing: 0.5px;">FROM</span>
-          <span class="font-monospace" title="${escrow.Account}">${shortenAddress(escrow.Account)}</span> ${copyBtn(escrow.Account, 'Sender Address Copied!')}
-        </div>
-        <i class="bi bi-arrow-right text-muted me-3 fs-6"></i>
-        <div>
-          <span class="text-muted d-block fw-bold" style="font-size: 0.65rem; letter-spacing: 0.5px;">TO</span>
-          <span class="font-monospace" title="${escrow.Destination}">${shortenAddress(escrow.Destination)}</span> ${copyBtn(escrow.Destination, 'Recipient Address Copied!')}
-        </div>
-      </div>
+      ${addressBlockHtml}
       <div class="p-3 bg-body-tertiary rounded border mb-3">
          ${timeDetails}
          <div class="mt-3 pt-2 border-top">
@@ -3525,7 +3569,7 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
 
              return `
                <div class="d-flex justify-content-between mb-1 small">
-                 <span class="fw-bold text-dark" style="font-size: 0.72rem;">${progressLabel}</span>
+                 <span class="fw-semibold text-secondary" style="font-size: 0.72rem;">${progressLabel}</span>
                  <span class="text-secondary fw-semibold" style="font-size: 0.7rem;">${progressPct}%</span>
                </div>
                <div class="progress" style="height: 6px;">
@@ -3545,7 +3589,7 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
 
     const claimBtn = document.createElement('button');
     claimBtn.type = 'button';
-    claimBtn.className = 'btn btn-outline-secondary btn-sm me-2 opacity-50';
+    claimBtn.className = 'btn btn-sm border-0 bg-transparent text-secondary opacity-35 me-2';
     claimBtn.id = `btn-claim-${escrow.index}`;
     claimBtn.innerHTML = '<i class="bi bi-lock me-1"></i> Claim';
     claimBtn.disabled = true; // Evaluated by refreshEscrowUI
@@ -3553,7 +3597,7 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
     
     const cancelBtn = document.createElement('button');
     cancelBtn.type = 'button';
-    cancelBtn.className = 'btn btn-outline-secondary btn-sm opacity-50';
+    cancelBtn.className = 'btn btn-sm border-0 bg-transparent text-secondary opacity-35';
     cancelBtn.id = `btn-cancel-${escrow.index}`;
     cancelBtn.innerHTML = '<i class="bi bi-lock me-1"></i> Cancel';
     cancelBtn.disabled = true; // Evaluated by refreshEscrowUI
