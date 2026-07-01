@@ -2724,7 +2724,14 @@ if (connectXamanBtnEl) {
     }
 
     const account = prompt("Enter your Token's Issuing Account (rAddress) to enable Trust Line Locking:");
-    if (!account || !account.trim()) return;
+    if (!account) return;
+    const trimmedAccount = account.trim();
+    if (!trimmedAccount) return;
+
+    if (!isValidXRPLAddressFormat(trimmedAccount)) {
+      showAlert('Invalid address format. Classic XRPL addresses must start with "r" and be 25-35 characters long.', 'warning');
+      return;
+    }
 
     const originalHtml = enableEscrowsBtn.innerHTML;
     enableEscrowsBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Checking status...';
@@ -2732,7 +2739,7 @@ if (connectXamanBtnEl) {
 
     try {
       // Check if already enabled
-      const checkResp = await fetch(`/check_issuer_status/${encodeURIComponent(account.trim())}`);
+      const checkResp = await fetch(`/check_issuer_status/${encodeURIComponent(trimmedAccount)}`);
       if (!checkResp.ok) {
         let checkErrMsg = await checkResp.text();
         try { const errJson = JSON.parse(checkErrMsg); if (errJson.detail) checkErrMsg = errJson.detail; } catch (e) {}
@@ -2749,7 +2756,7 @@ if (connectXamanBtnEl) {
 
       // Build payload from template
       const buildResp = await fetch(`/templates/enable_token_escrows/build`, {
-        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ ACCOUNT: account.trim() })
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ ACCOUNT: trimmedAccount })
       });
       if (!buildResp.ok) {
         let errMsg = await buildResp.text();
