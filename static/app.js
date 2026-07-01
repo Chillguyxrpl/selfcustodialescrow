@@ -328,6 +328,63 @@ function syncTimedEscrowFields(e) {
       if (source) cancelAfterField.dispatchEvent(new Event('input'));
     }
   }
+
+  // Real-time visual validation feedback for Finish/Cancel datetime and Duration inputs
+  const checkTime = Date.now();
+  if (escrowDurationHoursEl) {
+    const val = parseFloat(escrowDurationHoursEl.value);
+    if (escrowDurationHoursEl.value) {
+      if (isNaN(val) || val <= 0) {
+        escrowDurationHoursEl.classList.add('is-invalid');
+        escrowDurationHoursEl.classList.remove('is-valid');
+      } else {
+        escrowDurationHoursEl.classList.remove('is-invalid');
+        escrowDurationHoursEl.classList.add('is-valid');
+      }
+    } else {
+      escrowDurationHoursEl.classList.remove('is-invalid', 'is-valid');
+    }
+  }
+
+  if (escrowFinishDatetimeEl) {
+    if (escrowFinishDatetimeEl.value) {
+      const fd = new Date(escrowFinishDatetimeEl.value);
+      if (!isNaN(fd.getTime())) {
+        if (fd.getTime() < checkTime - 60000) { // Allow 1 minute grace time
+          escrowFinishDatetimeEl.classList.add('is-invalid');
+          escrowFinishDatetimeEl.classList.remove('is-valid');
+        } else {
+          escrowFinishDatetimeEl.classList.remove('is-invalid');
+          escrowFinishDatetimeEl.classList.add('is-valid');
+        }
+      } else {
+        escrowFinishDatetimeEl.classList.remove('is-invalid', 'is-valid');
+      }
+    } else {
+      escrowFinishDatetimeEl.classList.remove('is-invalid', 'is-valid');
+    }
+  }
+
+  if (escrowCancelDatetimeEl) {
+    if (escrowCancelDatetimeEl.value) {
+      const cd = new Date(escrowCancelDatetimeEl.value);
+      if (!isNaN(cd.getTime())) {
+        const isPast = cd.getTime() < checkTime - 60000;
+        const isBeforeFinish = finishMs && cd.getTime() <= finishMs;
+        if (isPast || isBeforeFinish) {
+          escrowCancelDatetimeEl.classList.add('is-invalid');
+          escrowCancelDatetimeEl.classList.remove('is-valid');
+        } else {
+          escrowCancelDatetimeEl.classList.remove('is-invalid');
+          escrowCancelDatetimeEl.classList.add('is-valid');
+        }
+      } else {
+        escrowCancelDatetimeEl.classList.remove('is-invalid', 'is-valid');
+      }
+    } else {
+      escrowCancelDatetimeEl.classList.remove('is-invalid', 'is-valid');
+    }
+  }
 }
 
 if (escrowDurationHoursEl) escrowDurationHoursEl.addEventListener('input', syncTimedEscrowFields);
@@ -530,6 +587,20 @@ function renderFields() {
       xrpInput.className = 'form-control';
       xrpInput.placeholder = 'Amount in drops (e.g., 1000000 for 1 XRP)';
       xrpGroup.appendChild(xrpInput);
+
+      const xrpHelp = document.createElement('small');
+      xrpHelp.className = 'text-info d-block mt-1 fw-semibold';
+      xrpGroup.appendChild(xrpHelp);
+
+      xrpInput.addEventListener('input', () => {
+        const val = parseFloat(xrpInput.value);
+        if (!isNaN(val) && val > 0) {
+          xrpHelp.textContent = `Equivalent to: ${(val / 1000000).toLocaleString(undefined, {maximumFractionDigits: 6})} XRP`;
+        } else {
+          xrpHelp.textContent = '';
+        }
+      });
+
       const presetsDiv = document.createElement('div');
       presetsDiv.className = 'd-flex flex-wrap gap-2 mt-2 mb-2';
       [1, 10, 100, 1000].forEach(p => {
@@ -1080,10 +1151,18 @@ function renderFields() {
   }
 
   if (durationRow) {
-    if (tmpl.escrow_type === 'timed') {
+    if (tmpl.escrow_type === 'timed' || keys.includes('FINISH_AFTER') || keys.includes('CANCEL_AFTER')) {
       durationRow.style.display = 'block';
       durationRow.className = 'col-12 mt-3'; // Ensure it spans the row
       appendToStep('FINISH_AFTER', durationRow);
+      
+      // Auto-prefill default duration of 24h if empty
+      if (!escrowDurationHoursEl.value && (!escrowFinishDatetimeEl || !escrowFinishDatetimeEl.value)) {
+        escrowDurationHoursEl.value = '24';
+        setTimeout(() => {
+          escrowDurationHoursEl.dispatchEvent(new Event('input', { bubbles: true }));
+        }, 50);
+      }
     } else {
       durationRow.style.display = 'none';
       escrowDurationHoursEl.value = '';
