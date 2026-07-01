@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(override=True)
 import requests
 import psycopg2
 from psycopg2.pool import ThreadedConnectionPool
