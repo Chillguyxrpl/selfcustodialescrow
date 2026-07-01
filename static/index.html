@@ -699,9 +699,19 @@
               <div class="card border">
                 <div class="card-header bg-body-secondary d-flex justify-content-between align-items-center">
                   <h5 class="mb-0 fw-bold text-dark-emphasis" style="font-size: 1rem;"><i class="bi bi-safe-fill text-primary me-2"></i> Your Escrow Dashboard</h5>
-                  <button class="btn btn-sm btn-outline-primary px-3" id="btnRefreshDashboardEscrows">
-                    <i class="bi bi-arrow-clockwise"></i> Refresh
-                  </button>
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="btn-group border rounded bg-white shadow-sm" role="group" aria-label="View Toggle">
+                      <button type="button" class="btn btn-sm btn-light px-2" id="btnEscrowViewGrid" title="Grid View">
+                        <i class="bi bi-grid-3x3-gap-fill text-primary"></i>
+                      </button>
+                      <button type="button" class="btn btn-sm btn-light px-2" id="btnEscrowViewList" title="Spreadsheet View">
+                        <i class="bi bi-list-task text-secondary"></i>
+                      </button>
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary px-3" id="btnRefreshDashboardEscrows">
+                      <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                  </div>
                 </div>
                 <div class="card-body">
                   <div id="dashboardEscrowsContainer">
