@@ -622,6 +622,40 @@ function renderFields() {
       tokenGroup.className = 'token-group row g-2';
       tokenGroup.style.display = 'none';
 
+      // Smart Token Presets Picker Row
+      const presetsCol = document.createElement('div');
+      presetsCol.className = 'col-12 mb-1';
+      const presetsBar = document.createElement('div');
+      presetsBar.className = 'd-flex flex-wrap gap-1 align-items-center bg-light p-2 rounded border';
+      presetsBar.innerHTML = '<small class="text-muted fw-bold me-2"><i class="bi bi-tags"></i> Token Presets:</small>';
+
+      const TOKEN_PRESETS = [
+        { name: 'RLUSD (Testnet)', currency: 'RLU', issuer: 'rQh82YKiEBBUJrxYLsLs32cB271F24Z5F3' },
+        { name: 'USD (Testnet)', currency: 'USD', issuer: 'rP47j4JpxD9FfS4c2kPdJ6V6V6rM5rM5' },
+        { name: 'EUR (Testnet)', currency: 'EUR', issuer: 'rP47j4JpxD9FfS4c2kPdJ6V6V6rM5rM5' }
+      ];
+
+      TOKEN_PRESETS.forEach(p => {
+        const badge = document.createElement('button');
+        badge.type = 'button';
+        badge.className = 'btn btn-xs btn-outline-info py-0 px-2 rounded-pill fw-medium';
+        badge.style.fontSize = '0.68rem';
+        badge.textContent = p.name;
+        badge.title = `Fill ${p.name}`;
+        badge.addEventListener('click', (e) => {
+          e.preventDefault();
+          tokenCurInput.value = p.currency;
+          tokenIssInput.value = p.issuer;
+          tokenCurInput.dispatchEvent(new Event('input', { bubbles: true }));
+          tokenIssInput.dispatchEvent(new Event('input', { bubbles: true }));
+          tokenCurInput.dispatchEvent(new Event('blur', { bubbles: true }));
+          tokenIssInput.dispatchEvent(new Event('blur', { bubbles: true }));
+        });
+        presetsBar.appendChild(badge);
+      });
+      presetsCol.appendChild(presetsBar);
+      tokenGroup.appendChild(presetsCol);
+
       const tokenValCol = document.createElement('div');
       tokenValCol.className = 'col-md-4 col-xl-3';
       const tokenValInput = document.createElement('input');
@@ -2349,6 +2383,157 @@ if (btnBuild) {
   });
 }
 
+function renderHumanReadablePreview(tx) {
+  const container = document.createElement('div');
+  container.className = 'card mb-3 border-info bg-info-subtle bg-opacity-10 shadow-sm';
+  
+  const header = document.createElement('div');
+  header.className = 'card-header bg-info-subtle border-info py-2 d-flex justify-content-between align-items-center';
+  header.innerHTML = '<span class="fw-bold small text-info-emphasis"><i class="bi bi-info-circle-fill"></i> Transaction Details Preview</span>';
+  container.appendChild(header);
+  
+  const body = document.createElement('div');
+  body.className = 'card-body py-3';
+  
+  let details = '';
+  const txType = tx.TransactionType || 'SignIn';
+  
+  const getAmountLabel = (amt) => {
+    if (typeof amt === 'string') {
+      return formatXrpAmount(amt);
+    } else if (typeof amt === 'object' && amt !== null) {
+      const decodedCurrency = amt.currency ? decodeCurrencyCode(amt.currency) : 'Token';
+      return `${Number(amt.value).toLocaleString(undefined, {maximumFractionDigits: 6})} ${decodedCurrency} (Issued by ${shortenAddress(amt.issuer)})`;
+    }
+    return String(amt);
+  };
+  
+  const getDateLabel = (epochSecs) => {
+    if (!epochSecs) return 'N/A';
+    const dateNum = Number(epochSecs);
+    if (!isNaN(dateNum)) {
+      return new Date((dateNum + 946684800) * 1000).toLocaleString();
+    }
+    return String(epochSecs);
+  };
+
+  if (txType === 'EscrowCreate') {
+    details = `
+      <div class="row g-2 small">
+        <div class="col-sm-4 fw-semibold text-secondary">Action:</div>
+        <div class="col-sm-8 text-primary fw-bold">Create Escrow</div>
+        
+        <div class="col-sm-4 fw-semibold text-secondary">Locked Amount:</div>
+        <div class="col-sm-8 text-dark fw-bold">${getAmountLabel(tx.Amount)}</div>
+        
+        <div class="col-sm-4 fw-semibold text-secondary">Sender (Owner):</div>
+        <div class="col-sm-8 text-dark font-monospace">${shortenAddress(tx.Account)}</div>
+        
+        <div class="col-sm-4 fw-semibold text-secondary">Recipient:</div>
+        <div class="col-sm-8 text-dark font-monospace">${shortenAddress(tx.Destination)}</div>
+        
+        ${tx.FinishAfter ? `
+          <div class="col-sm-4 fw-semibold text-secondary">Release Date:</div>
+          <div class="col-sm-8 text-dark">${getDateLabel(tx.FinishAfter)}</div>
+        ` : ''}
+        
+        ${tx.CancelAfter ? `
+          <div class="col-sm-4 fw-semibold text-secondary">Expiration Date:</div>
+          <div class="col-sm-8 text-dark">${getDateLabel(tx.CancelAfter)} (Refundable after this)</div>
+        ` : ''}
+        
+        ${tx.Condition ? `
+          <div class="col-sm-4 fw-semibold text-secondary">Condition:</div>
+          <div class="col-sm-8 text-dark"><span class="badge bg-warning-subtle text-warning border border-warning-subtle">Fulfillment Required</span></div>
+        ` : ''}
+      </div>
+    `;
+  } else if (txType === 'EscrowFinish') {
+    details = `
+      <div class="row g-2 small">
+        <div class="col-sm-4 fw-semibold text-secondary">Action:</div>
+        <div class="col-sm-8 text-primary fw-bold">Claim Escrow</div>
+        
+        <div class="col-sm-4 fw-semibold text-secondary">Escrow Owner:</div>
+        <div class="col-sm-8 text-dark font-monospace">${shortenAddress(tx.Owner)}</div>
+        
+        <div class="col-sm-4 fw-semibold text-secondary">Sequence ID:</div>
+        <div class="col-sm-8 text-dark font-monospace">${tx.OfferSequence}</div>
+        
+        ${tx.Fulfillment ? `
+          <div class="col-sm-4 fw-semibold text-secondary">Fulfillment Signature:</div>
+          <div class="col-sm-8 text-dark font-monospace text-truncate" style="max-width:240px;" title="${tx.Fulfillment}">${tx.Fulfillment.substring(0, 12)}...</div>
+        ` : ''}
+      </div>
+    `;
+  } else if (txType === 'EscrowCancel') {
+    details = `
+      <div class="row g-2 small">
+        <div class="col-sm-4 fw-semibold text-secondary">Action:</div>
+        <div class="col-sm-8 text-primary fw-bold">Cancel/Refund Escrow</div>
+        
+        <div class="col-sm-4 fw-semibold text-secondary">Escrow Owner:</div>
+        <div class="col-sm-8 text-dark font-monospace">${shortenAddress(tx.Owner)}</div>
+        
+        <div class="col-sm-4 fw-semibold text-secondary">Sequence ID:</div>
+        <div class="col-sm-8 text-dark font-monospace">${tx.OfferSequence}</div>
+      </div>
+    `;
+  } else if (txType === 'Payment') {
+    details = `
+      <div class="row g-2 small">
+        <div class="col-sm-4 fw-semibold text-secondary">Action:</div>
+        <div class="col-sm-8 text-primary fw-bold">Direct Payment</div>
+        
+        <div class="col-sm-4 fw-semibold text-secondary">Amount:</div>
+        <div class="col-sm-8 text-dark fw-bold">${getAmountLabel(tx.Amount)}</div>
+        
+        <div class="col-sm-4 fw-semibold text-secondary">Sender:</div>
+        <div class="col-sm-8 text-dark font-monospace">${shortenAddress(tx.Account)}</div>
+        
+        <div class="col-sm-4 fw-semibold text-secondary">Destination:</div>
+        <div class="col-sm-8 text-dark font-monospace">${shortenAddress(tx.Destination)}</div>
+      </div>
+    `;
+  } else if (txType === 'TrustSet') {
+    details = `
+      <div class="row g-2 small">
+        <div class="col-sm-4 fw-semibold text-secondary">Action:</div>
+        <div class="col-sm-8 text-primary fw-bold">Create Token Trustline</div>
+        
+        <div class="col-sm-4 fw-semibold text-secondary">Token Info:</div>
+        <div class="col-sm-8 text-dark fw-bold">${getAmountLabel(tx.LimitAmount)}</div>
+      </div>
+    `;
+  } else if (txType === 'AccountSet') {
+    details = `
+      <div class="row g-2 small">
+        <div class="col-sm-4 fw-semibold text-secondary">Action:</div>
+        <div class="col-sm-8 text-primary fw-bold">Modify Account Settings</div>
+        
+        ${tx.SetFlag === 18 ? `
+          <div class="col-sm-4 fw-semibold text-secondary">Feature:</div>
+          <div class="col-sm-8 text-success fw-bold"><i class="bi bi-shield-check"></i> Enable Trust Line Locking (Escrows)</div>
+        ` : `
+          <div class="col-sm-4 fw-semibold text-secondary">Set Flag:</div>
+          <div class="col-sm-8 text-dark font-monospace">${tx.SetFlag}</div>
+        `}
+      </div>
+    `;
+  } else {
+    details = `
+      <div class="row g-2 small">
+        <div class="col-sm-4 fw-semibold text-secondary">Transaction:</div>
+        <div class="col-sm-8 text-dark font-monospace">${txType}</div>
+      </div>
+    `;
+  }
+  
+  body.innerHTML = details;
+  container.appendChild(body);
+  return container;
+}
+
 document.getElementById('buildPayload').addEventListener('click', async (e) => {
   if (e) e.preventDefault();
 
@@ -2431,6 +2616,10 @@ document.getElementById('buildPayload').addEventListener('click', async (e) => {
       if (safetyWarnings) {
         modalBody.appendChild(safetyWarnings);
       }
+
+      // Display human-readable transaction preview card
+      const previewCard = renderHumanReadablePreview(txjson);
+      modalBody.appendChild(previewCard);
 
       const uuid = data.uuid;
       const uuidDiv = document.createElement('div');
@@ -3138,6 +3327,45 @@ async function renderActiveEscrows(account, container) {
       </div>
       <div class="p-3 bg-body-tertiary rounded border mb-3">
          ${timeDetails}
+         <div class="mt-3 pt-2 border-top">
+           ${(() => {
+             const nowVal = Math.floor(Date.now() / 1000) - 946684800; // XRPL Epoch seconds
+             let progressPct = 0;
+             let progressColor = 'bg-primary';
+             let progressLabel = '';
+
+             if (escrow.FinishAfter && nowVal < escrow.FinishAfter) {
+               // Locked countdown
+               const remaining = escrow.FinishAfter - nowVal;
+               const duration = 86400; // default to 24h locked window for scale
+               const elapsed = Math.max(0, duration - remaining);
+               progressPct = Math.min(95, Math.floor((elapsed / duration) * 100)); // cap locked at 95%
+               progressColor = 'bg-primary progress-bar-striped progress-bar-animated';
+               const rText = getRelativeTimeHtml(escrow.FinishAfter).replace(/<[^>]*>/g, '');
+               progressLabel = `<i class="bi bi-lock-fill text-primary"></i> Locked (Release ${rText})`;
+             } else if (escrow.CancelAfter && nowVal >= escrow.CancelAfter) {
+               // Expired
+               progressPct = 100;
+               progressColor = 'bg-danger';
+               progressLabel = '<i class="bi bi-exclamation-triangle-fill text-danger"></i> Expired (Refundable)';
+             } else {
+               // Claimable
+               progressPct = 100;
+               progressColor = 'bg-success';
+               progressLabel = '<i class="bi bi-unlock-fill text-success"></i> Ready to Claim!';
+             }
+
+             return `
+               <div class="d-flex justify-content-between mb-1 small">
+                 <span class="fw-bold text-dark" style="font-size: 0.72rem;">${progressLabel}</span>
+                 <span class="text-secondary fw-semibold" style="font-size: 0.7rem;">${progressPct}%</span>
+               </div>
+               <div class="progress" style="height: 6px;">
+                 <div class="progress-bar ${progressColor}" role="progressbar" style="width: ${progressPct}%" aria-valuenow="${progressPct}" aria-valuemin="0" aria-valuemax="100"></div>
+               </div>
+             `;
+           })()}
+         </div>
       </div>
       <div class="text-end" style="font-size:0.75rem;">
          <span class="text-muted fw-bold">ID:</span> <span class="font-monospace text-secondary">${shortIdx}</span> ${escrow.index ? copyBtn(escrow.index, 'Escrow ID Copied!') : ''}
