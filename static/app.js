@@ -3514,15 +3514,15 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
     table.className = 'table table-hover align-middle mb-0 text-dark-emphasis small';
     
     table.innerHTML = `
-      <thead class="table-light">
-        <tr>
-          <th scope="col" style="font-size: 0.72rem;" class="text-uppercase text-secondary fw-bold">Asset</th>
-          <th scope="col" style="font-size: 0.72rem;" class="text-uppercase text-secondary fw-bold">Amount</th>
-          <th scope="col" style="font-size: 0.72rem;" class="text-uppercase text-secondary fw-bold">Type</th>
-          <th scope="col" style="font-size: 0.72rem;" class="text-uppercase text-secondary fw-bold">Address</th>
-          <th scope="col" style="font-size: 0.72rem;" class="text-uppercase text-secondary fw-bold">Unlock/Expiration</th>
-          <th scope="col" style="font-size: 0.72rem;" class="text-uppercase text-secondary fw-bold">Status</th>
-          <th scope="col" style="font-size: 0.72rem;" class="text-uppercase text-secondary fw-bold text-end">Actions</th>
+      <thead style="border-bottom: 2px solid var(--card-border);">
+        <tr style="background-color: var(--card-bg);">
+          <th scope="col" style="font-size: 0.72rem; background-color: var(--card-bg); color: var(--text-color);" class="text-uppercase fw-bold">Asset</th>
+          <th scope="col" style="font-size: 0.72rem; background-color: var(--card-bg); color: var(--text-color);" class="text-uppercase fw-bold">Amount</th>
+          <th scope="col" style="font-size: 0.72rem; background-color: var(--card-bg); color: var(--text-color);" class="text-uppercase fw-bold">Type</th>
+          <th scope="col" style="font-size: 0.72rem; background-color: var(--card-bg); color: var(--text-color);" class="text-uppercase fw-bold">Address</th>
+          <th scope="col" style="font-size: 0.72rem; background-color: var(--card-bg); color: var(--text-color);" class="text-uppercase fw-bold">Unlock/Expiration</th>
+          <th scope="col" style="font-size: 0.72rem; background-color: var(--card-bg); color: var(--text-color);" class="text-uppercase fw-bold">Status</th>
+          <th scope="col" style="font-size: 0.72rem; background-color: var(--card-bg); color: var(--text-color);" class="text-uppercase fw-bold text-end">Actions</th>
         </tr>
       </thead>
       <tbody class="table-group-divider"></tbody>
@@ -3583,10 +3583,10 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
       
       let timeHtml = '<div class="d-flex flex-column gap-1" style="font-size: 0.75rem;">';
       if (escrow.FinishAfter) {
-         timeHtml += `<div class="text-success"><i class="bi bi-unlock-fill me-1"></i><strong>Unlocks:</strong> ${formatTime(escrow.FinishAfter)} <span class="fw-bold">(${getRelativeTimeHtml(escrow.FinishAfter)})</span></div>`;
+         timeHtml += `<div class="text-success"><i class="bi bi-unlock-fill me-1"></i><strong>Unlocks:</strong> ${formatTime(escrow.FinishAfter)} <span style="color: #b0b8c4; font-weight: 500;">(${getRelativeTimeHtml(escrow.FinishAfter)})</span></div>`;
       }
       if (escrow.CancelAfter) {
-         timeHtml += `<div class="text-warning"><i class="bi bi-hourglass-split me-1"></i><strong>Expires:</strong> ${formatTime(escrow.CancelAfter)} <span class="fw-bold">(${getRelativeTimeHtml(escrow.CancelAfter)})</span></div>`;
+         timeHtml += `<div class="text-warning"><i class="bi bi-hourglass-split me-1"></i><strong>Expires:</strong> ${formatTime(escrow.CancelAfter)} <span style="color: #b0b8c4; font-weight: 500;">(${getRelativeTimeHtml(escrow.CancelAfter)})</span></div>`;
       }
       if (escrow.Condition) {
          timeHtml += `<div class="text-info"><i class="bi bi-key-fill me-1"></i><strong>Condition Required</strong></div>`;
@@ -3709,7 +3709,7 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
              <i class="bi bi-unlock-fill me-2 fs-6"></i>
              <div>
                <strong>Unlocks:</strong> ${formatTime(escrow.FinishAfter)} 
-               <span class="ms-1 fw-bold">(${getRelativeTimeHtml(escrow.FinishAfter)})</span>
+               <span class="ms-1" style="color: #b0b8c4; font-weight: 500;">(${getRelativeTimeHtml(escrow.FinishAfter)})</span>
              </div>
            </li>`;
       }
@@ -3719,7 +3719,7 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
              <i class="bi bi-hourglass-split me-2 fs-6"></i>
              <div>
                <strong>Expires:</strong> ${formatTime(escrow.CancelAfter)} 
-               <span class="ms-1 fw-bold">(${getRelativeTimeHtml(escrow.CancelAfter)})</span>
+               <span class="ms-1" style="color: #b0b8c4; font-weight: 500;">(${getRelativeTimeHtml(escrow.CancelAfter)})</span>
              </div>
            </li>`;
       }
