@@ -774,7 +774,8 @@ def get_active_escrows(request: Request, account: str):
                                 "FinishAfter": tx.get("FinishAfter"),
                                 "DestinationTag": tx.get("DestinationTag"),
                                 "SourceTag": tx.get("SourceTag"),
-                                "OfferSequence": seq
+                                "OfferSequence": seq,
+                                "PreviousTxnLgrSeq": tx.get("ledger_index") or item.get("ledger_index")
                             }
                             incoming_candidates.append(escrow_obj)
                             existing_indexes.add(escrow_index)

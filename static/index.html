@@ -601,12 +601,17 @@
         </div>
 
         <!-- Bottom theme toggle and info button -->
-        <div class="mt-auto pt-3 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
-          <button id="themeToggleBtn" class="btn btn-outline-light btn-sm" type="button" title="Toggle Theme">
-            <i class="bi bi-moon-stars-fill"></i> Toggle Mode
-          </button>
-          <button class="btn btn-sm btn-outline-info" type="button" data-bs-toggle="modal" data-bs-target="#escrowInfoModal" title="Help">
-            <i class="bi bi-question-circle"></i> Help
+        <div class="mt-auto pt-3 border-top border-secondary-subtle d-flex flex-column gap-2">
+          <div class="d-flex justify-content-between align-items-center">
+            <button id="themeToggleBtn" class="btn btn-outline-light btn-sm w-50 me-1" type="button" title="Toggle Theme">
+              <i class="bi bi-moon-stars-fill"></i> Theme
+            </button>
+            <button class="btn btn-sm btn-outline-info w-50" type="button" data-bs-toggle="modal" data-bs-target="#escrowInfoModal" title="Help">
+              <i class="bi bi-question-circle"></i> Info
+            </button>
+          </div>
+          <button class="btn btn-sm btn-outline-light w-100" type="button" id="btnTriggerWelcomeTour" title="Start Welcome Guide Tour">
+            <i class="bi bi-compass"></i> Guided Setup Tour
           </button>
         </div>
       </div>
@@ -697,14 +702,20 @@
 
               <!-- Active Escrows dashboard area -->
               <div class="card border">
-                <div class="card-header bg-body-secondary d-flex justify-content-between align-items-center">
+                <div class="card-header bg-body-secondary d-flex justify-content-between align-items-center flex-wrap gap-2">
                   <h5 class="mb-0 fw-bold text-dark-emphasis" style="font-size: 1rem;"><i class="bi bi-safe-fill text-primary me-2"></i> Your Escrow Dashboard</h5>
                   <div class="d-flex align-items-center gap-2">
+                    <select class="form-select form-select-sm border shadow-sm select-escrow-sort" style="font-size: 0.8rem; width: 160px;" title="Sort Escrows">
+                      <option value="release_soonest">Release: Soonest</option>
+                      <option value="release_latest">Release: Latest</option>
+                      <option value="amount_desc">Amount: High→Low</option>
+                      <option value="amount_asc">Amount: Low→High</option>
+                    </select>
                     <div class="btn-group border rounded bg-white shadow-sm" role="group" aria-label="View Toggle">
-                      <button type="button" class="btn btn-sm btn-light px-2" id="btnEscrowViewGrid" title="Grid View">
+                      <button type="button" class="btn btn-sm btn-light px-2 btn-escrow-view-grid" id="btnEscrowViewGrid" title="Grid View">
                         <i class="bi bi-grid-3x3-gap-fill text-primary"></i>
                       </button>
-                      <button type="button" class="btn btn-sm btn-light px-2" id="btnEscrowViewList" title="Spreadsheet View">
+                      <button type="button" class="btn btn-sm btn-light px-2 btn-escrow-view-list" id="btnEscrowViewList" title="Spreadsheet View">
                         <i class="bi bi-list-task text-secondary"></i>
                       </button>
                     </div>
@@ -789,10 +800,26 @@
           <!-- Pane 3: Escrow Scanner -->
           <div class="tab-pane fade" id="pane-scan" role="tabpanel" aria-labelledby="tab-scan-btn">
             <div class="card border" id="escrowViewerSection">
-              <div class="card-header bg-body-secondary">
+              <div class="card-header bg-body-secondary d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <h5 class="mb-0 fw-bold text-dark-emphasis" style="font-size: 1rem;">
                   <i class="bi bi-search text-primary me-2"></i> On-Chain Escrow Viewer
                 </h5>
+                <div class="d-flex align-items-center gap-2">
+                  <select class="form-select form-select-sm border shadow-sm select-escrow-sort" style="font-size: 0.8rem; width: 160px;" title="Sort Escrows">
+                    <option value="release_soonest">Release: Soonest</option>
+                    <option value="release_latest">Release: Latest</option>
+                    <option value="amount_desc">Amount: High→Low</option>
+                    <option value="amount_asc">Amount: Low→High</option>
+                  </select>
+                  <div class="btn-group border rounded bg-white shadow-sm" role="group" aria-label="View Toggle">
+                    <button type="button" class="btn btn-sm btn-light px-2 btn-escrow-view-grid" title="Grid View">
+                      <i class="bi bi-grid-3x3-gap-fill text-primary"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-light px-2 btn-escrow-view-list" title="Spreadsheet View">
+                      <i class="bi bi-list-task text-secondary"></i>
+                    </button>
+                  </div>
+                </div>
               </div>
               <div class="card-body">
                 <p class="small text-muted mb-3">Scan the ledger to find and interact with active escrows for any XRPL account.</p>
@@ -965,44 +992,7 @@
       </div>
     </div>
 
-    <!-- Welcome Modal -->
-    <div class="modal fade" id="welcomeModal" tabindex="-1" aria-labelledby="welcomeModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content">
-          <div class="modal-header bg-primary text-white">
-            <h5 class="modal-title" id="welcomeModalLabel"><i class="bi bi-shield-lock"></i> Welcome to Just a Chill Escrow</h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <div class="text-center mb-4">
-              <i class="bi bi-safe text-primary" style="font-size: 4rem;"></i>
-              <h4 class="mt-2">Self-Custodial Smart Contracts</h4>
-              <p class="text-muted">Create, manage, and batch XRPL escrows securely using the Xaman wallet. Your keys never leave your device.</p>
-            </div>
-            <div class="row g-4">
-              <div class="col-md-4 text-center">
-                <i class="bi bi-file-earmark-text fs-1 text-info mb-2"></i>
-                <h6>1. Pick a Template</h6>
-                <p class="small text-muted">Choose from time-locked, conditional, or token escrows to fit your needs.</p>
-              </div>
-              <div class="col-md-4 text-center">
-                <i class="bi bi-ui-checks fs-1 text-success mb-2"></i>
-                <h6>2. Fill the Details</h6>
-                <p class="small text-muted">Enter amounts, addresses, and conditions. Use our tools to look up tokens and estimate fees.</p>
-              </div>
-              <div class="col-md-4 text-center">
-                <i class="bi bi-phone-vibrate fs-1 text-primary mb-2"></i>
-                <h6>3. Sign Securely</h6>
-                <p class="small text-muted">Review the summary and sign via Push Notification or QR code with Xaman.</p>
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer justify-content-center">
-            <button type="button" class="btn btn-primary px-5" data-bs-dismiss="modal">Let's Get Started</button>
-          </div>
-        </div>
-      </div>
-    </div>
+    
 
     <!-- Token Search Modal -->
     <div class="modal fade" id="tokenSearchModal" tabindex="-1" aria-labelledby="tokenSearchModalLabel" aria-hidden="true">
@@ -1163,37 +1153,110 @@
     <!-- Welcome Modal -->
     <div class="modal fade" id="welcomeModal" tabindex="-1" aria-labelledby="welcomeModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content">
-          <div class="modal-header bg-primary text-white">
-            <h5 class="modal-title" id="welcomeModalLabel"><i class="bi bi-shield-lock"></i> Welcome to Just a Chill Escrow</h5>
+        <div class="modal-content border-0 shadow-lg">
+          <div class="modal-header bg-primary text-white py-3">
+            <h5 class="modal-title fw-bold" id="welcomeModalLabel">
+              <i class="bi bi-shield-lock-fill me-2 animate-pulse"></i> Just a Chill Escrow Setup Guide
+            </h5>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
-          <div class="modal-body">
-            <div class="text-center mb-4">
-              <i class="bi bi-safe text-primary" style="font-size: 4rem;"></i>
-              <h4 class="mt-2">Self-Custodial Smart Contracts</h4>
-              <p class="text-muted">Create, manage, and batch XRPL escrows securely using the Xaman wallet. Your keys never leave your device.</p>
-            </div>
-            <div class="row g-4">
-              <div class="col-md-4 text-center">
-                <i class="bi bi-file-earmark-text fs-1 text-info mb-2"></i>
-                <h6>1. Pick a Template</h6>
-                <p class="small text-muted">Choose from time-locked, conditional, or token escrows to fit your needs.</p>
+          <div class="modal-body p-0">
+            <div id="welcomeCarousel" class="carousel slide" data-bs-interval="false">
+              <!-- Carousel Indicators -->
+              <div class="carousel-indicators mb-3">
+                <button type="button" data-bs-target="#welcomeCarousel" data-bs-slide-to="0" class="active bg-primary" aria-current="true" aria-label="Slide 1"></button>
+                <button type="button" data-bs-target="#welcomeCarousel" data-bs-slide-to="1" class="bg-primary" aria-label="Slide 2"></button>
+                <button type="button" data-bs-target="#welcomeCarousel" data-bs-slide-to="2" class="bg-primary" aria-label="Slide 3"></button>
+                <button type="button" data-bs-target="#welcomeCarousel" data-bs-slide-to="3" class="bg-primary" aria-label="Slide 4"></button>
               </div>
-              <div class="col-md-4 text-center">
-                <i class="bi bi-ui-checks fs-1 text-success mb-2"></i>
-                <h6>2. Fill the Details</h6>
-                <p class="small text-muted">Enter amounts, addresses, and conditions. Use our tools to look up tokens and estimate fees.</p>
-              </div>
-              <div class="col-md-4 text-center">
-                <i class="bi bi-phone-vibrate fs-1 text-primary mb-2"></i>
-                <h6>3. Sign Securely</h6>
-                <p class="small text-muted">Review the summary and sign via Push Notification or QR code with Xaman.</p>
+
+              <!-- Carousel Items -->
+              <div class="carousel-inner">
+                <!-- Slide 1: Welcome -->
+                <div class="carousel-item active p-5">
+                  <div class="text-center">
+                    <div class="mb-4">
+                      <span class="d-inline-flex align-items-center justify-content-center bg-primary-subtle text-primary rounded-circle" style="width: 90px; height: 90px;">
+                        <i class="bi bi-safe-fill" style="font-size: 3.2rem;"></i>
+                      </span>
+                    </div>
+                    <h3 class="fw-bold mb-2">Self-Custodial Escrows on XRPL</h3>
+                    <p class="text-secondary mx-auto mb-4" style="max-width: 520px;">
+                      Welcome! Just a Chill Escrow enables you to secure, manage, and execute complex smart contract transactions completely locally. Your private keys never touch any server.
+                    </p>
+                    <div class="alert alert-info d-inline-block small mb-0 py-2 border-0">
+                      <i class="bi bi-shield-check text-info me-2"></i> All cryptographic preimages and seeds are generated locally.
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Slide 2: Connect Wallet -->
+                <div class="carousel-item p-5">
+                  <div class="text-center">
+                    <div class="mb-4">
+                      <span class="d-inline-flex align-items-center justify-content-center bg-success-subtle text-success rounded-circle" style="width: 90px; height: 90px;">
+                        <i class="bi bi-qr-code-scan" style="font-size: 3rem;"></i>
+                      </span>
+                    </div>
+                    <h3 class="fw-bold mb-2">Step 1: Connect with Xaman</h3>
+                    <p class="text-secondary mx-auto mb-4" style="max-width: 520px;">
+                      Click **Connect Wallet** in the left sidebar to generate a secure login QR code. Review and sign the payload in your Xaman mobile application to grant read-only public access to your ledger state.
+                    </p>
+                    <div class="alert alert-success d-inline-block small mb-0 py-2 border-0">
+                      <i class="bi bi-check-circle-fill text-success me-2"></i> Signing in updates your live XRP balance and tracks active escrows automatically.
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Slide 3: Build Escrow -->
+                <div class="carousel-item p-5">
+                  <div class="text-center">
+                    <div class="mb-4">
+                      <span class="d-inline-flex align-items-center justify-content-center bg-info-subtle text-info rounded-circle" style="width: 90px; height: 90px;">
+                        <i class="bi bi-file-earmark-code-fill" style="font-size: 3rem;"></i>
+                      </span>
+                    </div>
+                    <h3 class="fw-bold mb-2">Step 2: Choose Your Template</h3>
+                    <p class="text-secondary mx-auto mb-4" style="max-width: 520px;">
+                      Open **Build Escrow** to design lockups. Select **Timed Escrows** to release funds after a certain date, or **Conditional Escrows** to release funds when a secret fulfillment key is provided.
+                    </p>
+                    <div class="alert alert-info d-inline-block small mb-0 py-2 border-0">
+                      <i class="bi bi-gear-fill text-info me-2"></i> Use our integrated crypt-generator to precalculate keys.
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Slide 4: Interactive Dashboard -->
+                <div class="carousel-item p-5">
+                  <div class="text-center">
+                    <div class="mb-4">
+                      <span class="d-inline-flex align-items-center justify-content-center bg-warning-subtle text-warning rounded-circle" style="width: 90px; height: 90px;">
+                        <i class="bi bi-layout-wtf" style="font-size: 3rem; transform: rotate(90deg);"></i>
+                      </span>
+                    </div>
+                    <h3 class="fw-bold mb-2">Step 3: Monitor & Claim</h3>
+                    <p class="text-secondary mx-auto mb-4" style="max-width: 520px;">
+                      Your personal dashboard shows active time-locks and expiry countdowns. Switch between **Grid View** and **Spreadsheet View** to scan details, and trigger one-click **Claim** or **Cancel** transactions directly!
+                    </p>
+                    <div class="alert alert-warning d-inline-block small mb-0 py-2 border-0">
+                      <i class="bi bi-stars text-warning me-2"></i> You can re-run this setup tour anytime from the bottom sidebar menu.
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-          <div class="modal-footer justify-content-center">
-            <button type="button" class="btn btn-primary px-5" data-bs-dismiss="modal">Let's Get Started</button>
+          <!-- Modal Footer with Navigation controls -->
+          <div class="modal-footer justify-content-between bg-light py-3 border-top">
+            <button type="button" class="btn btn-outline-secondary btn-sm px-3" id="btnTourPrev" style="visibility: hidden;">
+              <i class="bi bi-arrow-left me-1"></i> Back
+            </button>
+            <button type="button" class="btn btn-primary btn-sm px-4" id="btnTourNext">
+              Next Step <i class="bi bi-arrow-right ms-1"></i>
+            </button>
+            <button type="button" class="btn btn-success btn-sm px-4" id="btnTourFinish" style="display: none;" data-bs-dismiss="modal">
+              Let's Get Started <i class="bi bi-check-lg ms-1"></i>
+            </button>
           </div>
         </div>
       </div>
@@ -1233,6 +1296,25 @@
           </div>
           <div class="modal-footer bg-light border-0">
             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" onclick="stopPayloadPolling()">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Xaman Connection Modal -->
+    <div class="modal fade" id="xamanConnectModal" tabindex="-1" aria-labelledby="xamanConnectModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+          <div class="modal-header bg-primary text-white py-3">
+            <h5 class="modal-title fw-bold" id="xamanConnectModalLabel">
+              <i class="bi bi-qr-code-scan me-2"></i> Connect Xaman Wallet
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" onclick="stopSignInPolling()"></button>
+          </div>
+          <div class="modal-body text-center p-4">
+            <div id="xamanConnectModalContent">
+              <!-- Dynamic QR code and link will be injected here -->
+            </div>
           </div>
         </div>
       </div>

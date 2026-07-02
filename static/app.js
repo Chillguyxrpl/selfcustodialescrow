@@ -2935,6 +2935,19 @@ if (window.connectedAccount) {
 
 // No wallet address input is shown; user fills required ACCOUNT fields in the selected escrow.
 
+function stopSignInPolling() {
+  if (signInPollingInterval) {
+    clearInterval(signInPollingInterval);
+    signInPollingInterval = null;
+  }
+  if (connectXamanBtnEl) {
+    const originalHtml = connectXamanBtnEl.getAttribute('data-original-html') || '<i class="bi bi-qr-code-scan"></i> Connect Wallet';
+    connectXamanBtnEl.innerHTML = originalHtml;
+    connectXamanBtnEl.disabled = false;
+  }
+}
+window.stopSignInPolling = stopSignInPolling;
+
 if (connectXamanBtnEl) connectXamanBtnEl.addEventListener('click', async () => {
   const originalHtml = connectXamanBtnEl.innerHTML;
   connectXamanBtnEl.setAttribute('data-original-html', originalHtml);
@@ -2951,19 +2964,32 @@ if (connectXamanBtnEl) connectXamanBtnEl.addEventListener('click', async () => {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.detail || JSON.stringify(data));
 
-    let qrContainer = document.getElementById('xamanQrContainer');
-    if (!qrContainer) {
-      qrContainer = document.createElement('div');
-      qrContainer.id = 'xamanQrContainer';
-      qrContainer.className = 'mt-3 text-center p-3 border rounded bg-body-tertiary shadow-sm';
-      connectXamanBtnEl.parentNode.insertBefore(qrContainer, connectXamanBtnEl.nextSibling);
+    // Inject QR code and metadata into center modal content
+    const modalContent = document.getElementById('xamanConnectModalContent');
+    if (modalContent) {
+      modalContent.innerHTML = `
+        <div class="mb-3">
+          <img src="${data.refs.qr_png}" class="img-fluid rounded shadow mb-3" style="max-width: 240px;" alt="Xaman QR">
+        </div>
+        <h6 class="fw-bold mb-2">Scan with your Xaman App</h6>
+        <p class="text-secondary small mb-3">Scan this QR code using the camera or Xaman app to connect your wallet securely.</p>
+        <div class="d-grid gap-2 col-10 mx-auto">
+          <a href="${data.next.always}" target="_blank" class="btn btn-primary btn-sm">
+            <i class="bi bi-box-arrow-up-right me-1"></i> Open Xaman (Mobile Link)
+          </a>
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal" onclick="stopSignInPolling()">
+            Cancel
+          </button>
+        </div>
+      `;
     }
-    
-    qrContainer.innerHTML = `
-      <p class="small fw-bold mb-2">Scan with Xaman</p>
-      <img src="${data.refs.qr_png}" class="img-fluid rounded shadow-sm mb-2" style="max-width: 200px;" alt="Xaman QR">
-      <div><a href="${data.next.always}" target="_blank" class="btn btn-sm btn-outline-primary mt-2">Open Xaman (Mobile)</a></div>
-    `;
+
+    // Display the center modal
+    const modalEl = document.getElementById('xamanConnectModal');
+    if (modalEl) {
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      modal.show();
+    }
 
     // Start polling for sign-in resolution
     startSignInPolling(data.uuid, originalHtml);
@@ -2989,6 +3015,13 @@ function startSignInPolling(uuid, originalHtml) {
         clearInterval(signInPollingInterval);
         signInPollingInterval = null;
         window.closeActiveXamanPopup();
+        
+        // Hide the connection modal if visible
+        const modalEl = document.getElementById('xamanConnectModal');
+        if (modalEl) {
+          const modal = bootstrap.Modal.getInstance(modalEl);
+          if (modal) modal.hide();
+        }
         
         const qrContainer = document.getElementById('xamanQrContainer');
         if (qrContainer) qrContainer.remove();
@@ -3396,13 +3429,57 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
 
   container.innerHTML = '<div class="text-center my-3"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Scanning ledger...</div>';
   
-  const escrows = preFetchedEscrows || await fetchActiveEscrows(account);
+  let escrows = preFetchedEscrows || await fetchActiveEscrows(account);
   container.innerHTML = '';
 
   if (escrows.length === 0) {
     container.innerHTML = '<div class="alert alert-info mb-0">No active escrows found for this account on the ledger.</div>';
     return;
   }
+
+  // Sort escrows by release date (FinishAfter) or amount
+  const sortType = localStorage.getItem('escrowSortType') || 'release_soonest';
+  escrows = [...escrows].sort((a, b) => {
+    // Release date sort: use FinishAfter (the unlock/release timestamp).
+    // Escrows without a FinishAfter fall back to CancelAfter, then sort to end.
+    const getReleaseTime = (esc) => {
+      if (esc.FinishAfter !== undefined && esc.FinishAfter !== null) {
+        return Number(esc.FinishAfter);
+      }
+      if (esc.CancelAfter !== undefined && esc.CancelAfter !== null) {
+        return Number(esc.CancelAfter);
+      }
+      return null;
+    };
+
+    const getAmountDrops = (esc) => {
+      const amt = esc.Amount;
+      if (typeof amt === 'string') return Number(amt);
+      if (typeof amt === 'object' && amt !== null && amt.value) return Number(amt.value);
+      return 0;
+    };
+
+    if (sortType === 'release_soonest') {
+      const ta = getReleaseTime(a);
+      const tb = getReleaseTime(b);
+      if (ta === null && tb === null) return 0;
+      if (ta === null) return 1;  // no release date → end
+      if (tb === null) return -1;
+      return ta - tb;  // earlier release first
+    } else if (sortType === 'release_latest') {
+      const ta = getReleaseTime(a);
+      const tb = getReleaseTime(b);
+      if (ta === null && tb === null) return 0;
+      if (ta === null) return 1;
+      if (tb === null) return -1;
+      return tb - ta;  // later release first
+    } else if (sortType === 'amount_desc') {
+      return getAmountDrops(b) - getAmountDrops(a);
+    } else if (sortType === 'amount_asc') {
+      return getAmountDrops(a) - getAmountDrops(b);
+    }
+    return 0;
+  });
 
   const formatTime = (epochSeconds) => {
     if (!epochSeconds) return 'N/A';
@@ -3917,50 +3994,161 @@ function initTokenSearch() {
 }
 
 function initViewToggle() {
-  const btnGrid = document.getElementById('btnEscrowViewGrid');
-  const btnList = document.getElementById('btnEscrowViewList');
-  
-  if (!btnGrid || !btnList) return;
+  const grids = document.querySelectorAll('.btn-escrow-view-grid');
+  const lists = document.querySelectorAll('.btn-escrow-view-list');
   
   const updateToggleUI = () => {
-    if (window.escrowViewType === 'list') {
-      btnGrid.className = 'btn btn-sm btn-light px-2';
-      btnGrid.innerHTML = '<i class="bi bi-grid-3x3-gap text-secondary"></i>';
-      btnList.className = 'btn btn-sm btn-primary px-2 text-white';
-      btnList.innerHTML = '<i class="bi bi-list-task"></i>';
-    } else {
-      btnGrid.className = 'btn btn-sm btn-primary px-2 text-white';
-      btnGrid.innerHTML = '<i class="bi bi-grid-3x3-gap"></i>';
-      btnList.className = 'btn btn-sm btn-light px-2';
-      btnList.innerHTML = '<i class="bi bi-list-task text-secondary"></i>';
-    }
+    const viewType = window.escrowViewType || localStorage.getItem('escrowViewType') || 'grid';
+    
+    grids.forEach(btnGrid => {
+      if (viewType === 'list') {
+        btnGrid.className = 'btn btn-sm btn-light px-2 btn-escrow-view-grid';
+        btnGrid.innerHTML = '<i class="bi bi-grid-3x3-gap text-secondary"></i>';
+      } else {
+        btnGrid.className = 'btn btn-sm btn-primary px-2 text-white btn-escrow-view-grid';
+        btnGrid.innerHTML = '<i class="bi bi-grid-3x3-gap"></i>';
+      }
+    });
+    
+    lists.forEach(btnList => {
+      if (viewType === 'list') {
+        btnList.className = 'btn btn-sm btn-primary px-2 text-white btn-escrow-view-list';
+        btnList.innerHTML = '<i class="bi bi-list-task"></i>';
+      } else {
+        btnList.className = 'btn btn-sm btn-light px-2 btn-escrow-view-list';
+        btnList.innerHTML = '<i class="bi bi-list-task text-secondary"></i>';
+      }
+    });
   };
   
-  btnGrid.addEventListener('click', () => {
-    window.escrowViewType = 'grid';
-    localStorage.setItem('escrowViewType', 'grid');
-    updateToggleUI();
-    if (window.connectedAccount) {
-      updateDashboard(window.connectedAccount);
-    }
+  grids.forEach(btnGrid => {
+    btnGrid.addEventListener('click', () => {
+      window.escrowViewType = 'grid';
+      localStorage.setItem('escrowViewType', 'grid');
+      updateToggleUI();
+      // Refresh active renderers
+      if (window.connectedAccount) {
+        updateDashboard(window.connectedAccount);
+      }
+      const scanInput = document.getElementById('escrowAccountInput');
+      if (scanInput && scanInput.value.trim()) {
+        renderActiveEscrows(scanInput.value.trim(), document.getElementById('escrowViewerContainer'));
+      }
+    });
   });
   
-  btnList.addEventListener('click', () => {
-    window.escrowViewType = 'list';
-    localStorage.setItem('escrowViewType', 'list');
-    updateToggleUI();
-    if (window.connectedAccount) {
-      updateDashboard(window.connectedAccount);
-    }
+  lists.forEach(btnList => {
+    btnList.addEventListener('click', () => {
+      window.escrowViewType = 'list';
+      localStorage.setItem('escrowViewType', 'list');
+      updateToggleUI();
+      // Refresh active renderers
+      if (window.connectedAccount) {
+        updateDashboard(window.connectedAccount);
+      }
+      const scanInput = document.getElementById('escrowAccountInput');
+      if (scanInput && scanInput.value.trim()) {
+        renderActiveEscrows(scanInput.value.trim(), document.getElementById('escrowViewerContainer'));
+      }
+    });
   });
   
   updateToggleUI();
+}
+
+function initSortToggle() {
+  const sortSelects = document.querySelectorAll('.select-escrow-sort');
+  
+  const updateSortUI = () => {
+    const sortType = localStorage.getItem('escrowSortType') || 'release_soonest';
+    sortSelects.forEach(select => {
+      select.value = sortType;
+    });
+  };
+  
+  sortSelects.forEach(select => {
+    select.addEventListener('change', (e) => {
+      const val = e.target.value;
+      localStorage.setItem('escrowSortType', val);
+      updateSortUI();
+      
+      // Refresh active renderers
+      if (window.connectedAccount) {
+        updateDashboard(window.connectedAccount);
+      }
+      const scanInput = document.getElementById('escrowAccountInput');
+      if (scanInput && scanInput.value.trim()) {
+        renderActiveEscrows(scanInput.value.trim(), document.getElementById('escrowViewerContainer'));
+      }
+    });
+  });
+  
+  updateSortUI();
+}
+
+function initWelcomeTour() {
+  const carouselEl = document.getElementById('welcomeCarousel');
+  const modalEl = document.getElementById('welcomeModal');
+  const btnTrigger = document.getElementById('btnTriggerWelcomeTour');
+  
+  if (!carouselEl || !modalEl) return;
+  
+  const carousel = bootstrap.Carousel.getOrCreateInstance(carouselEl);
+  const prevBtn = document.getElementById('btnTourPrev');
+  const nextBtn = document.getElementById('btnTourNext');
+  const finishBtn = document.getElementById('btnTourFinish');
+  
+  const updateButtons = (activeIndex) => {
+    if (activeIndex === 0) {
+      if (prevBtn) prevBtn.style.visibility = 'hidden';
+      if (nextBtn) nextBtn.style.display = 'inline-block';
+      if (finishBtn) finishBtn.style.display = 'none';
+    } else if (activeIndex === 3) {
+      if (prevBtn) prevBtn.style.visibility = 'visible';
+      if (nextBtn) nextBtn.style.display = 'none';
+      if (finishBtn) finishBtn.style.display = 'inline-block';
+    } else {
+      if (prevBtn) prevBtn.style.visibility = 'visible';
+      if (nextBtn) nextBtn.style.display = 'inline-block';
+      if (finishBtn) finishBtn.style.display = 'none';
+    }
+  };
+  
+  carouselEl.addEventListener('slid.bs.carousel', (event) => {
+    updateButtons(event.to);
+  });
+  
+  if (nextBtn) {
+    nextBtn.addEventListener('click', () => {
+      carousel.next();
+    });
+  }
+  
+  if (prevBtn) {
+    prevBtn.addEventListener('click', () => {
+      carousel.prev();
+    });
+  }
+  
+  if (btnTrigger) {
+    btnTrigger.addEventListener('click', () => {
+      carousel.to(0);
+      updateButtons(0);
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      modal.show();
+    });
+  }
+  
+  // Initialize button visibility for first load
+  updateButtons(0);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   initTokenSearch();
   initDurationQuickSelect();
   initViewToggle();
+  initSortToggle();
+  initWelcomeTour();
   
   const btnRefreshDashboard = document.getElementById('btnRefreshDashboardEscrows');
   if (btnRefreshDashboard) {
