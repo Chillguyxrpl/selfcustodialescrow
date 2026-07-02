@@ -543,6 +543,15 @@
         padding: 1.25rem;
         box-shadow: 0 2px 6px rgba(0,0,0,0.04);
       }
+      .table-hover tbody tr {
+        transition: background-color 0.15s ease-in-out;
+      }
+      [data-bs-theme="dark"] .table-hover tbody tr:hover td {
+        background-color: rgba(255, 255, 255, 0.03) !important;
+      }
+      [data-bs-theme="light"] .table-hover tbody tr:hover td {
+        background-color: rgba(0, 0, 0, 0.02) !important;
+      }
     </style>
   </head>
   <body>
@@ -662,6 +671,7 @@
                   <div class="dashboard-stat-card">
                     <div class="text-secondary small fw-semibold mb-1">ACTIVE ESCROWS</div>
                     <h3 class="fw-bold mb-0 text-dark-emphasis" id="dashboard-active-escrows-count">0</h3>
+                    <div class="text-secondary small fw-semibold mt-1 mb-1" id="dashboard-active-escrows-sum" style="display: none; font-size: 0.72rem;"></div>
                     <small class="text-muted">Currently locked on the ledger</small>
                   </div>
                 </div>

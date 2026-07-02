@@ -2867,6 +2867,34 @@ async function updateDashboard(account) {
       const escrows = await fetchActiveEscrows(account);
       dashEscrowsContainer.innerHTML = '';
       if (dashEscrowsCount) dashEscrowsCount.textContent = escrows.length;
+
+      const sumEl = document.getElementById('dashboard-active-escrows-sum');
+      if (sumEl) {
+        if (escrows.length > 0) {
+          const totals = {};
+          escrows.forEach(e => {
+            let cur = 'XRP';
+            let val = 0;
+            if (typeof e.Amount === 'string') {
+              cur = 'XRP';
+              val = Number(e.Amount) / 1000000;
+            } else if (typeof e.Amount === 'object' && e.Amount !== null) {
+              cur = e.Amount.currency ? decodeCurrencyCode(e.Amount.currency) : 'Token';
+              val = Number(e.Amount.value || 0);
+            }
+            totals[cur] = (totals[cur] || 0) + val;
+          });
+          
+          const sumParts = Object.entries(totals).map(([cur, val]) => {
+            return `${val.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${cur}`;
+          });
+          
+          sumEl.textContent = `Sum: ${sumParts.join(', ')} Locked`;
+          sumEl.style.display = 'block';
+        } else {
+          sumEl.style.display = 'none';
+        }
+      }
       
       if (escrows.length === 0) {
         dashEscrowsContainer.innerHTML = '<div class="alert alert-info mb-0">No active escrows found for your account on the ledger.</div>';
@@ -3563,20 +3591,29 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
       if (isSelf) {
         addressHtml = `
           <div class="d-flex align-items-center">
-            <span class="font-monospace bg-light p-1 px-2 rounded border text-secondary" style="font-size: 0.78rem;" title="${escrow.Account}">${shortenAddress(escrow.Account)}</span>
-            ${copyBtn(escrow.Account, 'Account Address Copied!')}
+            <span class="font-monospace bg-light p-1 px-2 rounded border text-secondary d-flex align-items-center" style="font-size: 0.78rem;" title="${escrow.Account}">
+              ${shortenAddress(escrow.Account)}
+              ${copyBtn(escrow.Account, 'Account Address Copied!')}
+              <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0.5 ms-1.5 fw-semibold" style="font-size: 0.62rem; line-height: 1;">Me</span>
+            </span>
           </div>
         `;
       } else {
+        const fmHtml = escrow.Account === account 
+          ? `<span class="text-secondary" title="${escrow.Account}">${shortenAddress(escrow.Account)}</span>${copyBtn(escrow.Account, 'Sender Address Copied!')}<span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0.5 ms-1 fw-semibold" style="font-size: 0.62rem; line-height: 1;">Me</span>`
+          : `<span class="text-secondary" title="${escrow.Account}">${shortenAddress(escrow.Account)}</span>${copyBtn(escrow.Account, 'Sender Address Copied!')}`;
+        
+        const toHtml = escrow.Destination === account 
+          ? `<span class="text-secondary" title="${escrow.Destination}">${shortenAddress(escrow.Destination)}</span>${copyBtn(escrow.Destination, 'Recipient Address Copied!')}<span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0.5 ms-1 fw-semibold" style="font-size: 0.62rem; line-height: 1;">Me</span>`
+          : `<span class="text-secondary" title="${escrow.Destination}">${shortenAddress(escrow.Destination)}</span>${copyBtn(escrow.Destination, 'Recipient Address Copied!')}`;
+
         addressHtml = `
           <div class="d-flex align-items-center gap-1 font-monospace" style="font-size: 0.78rem;">
             <span class="text-muted fw-bold" style="font-size: 0.62rem;">FM:</span>
-            <span class="text-secondary" title="${escrow.Account}">${shortenAddress(escrow.Account)}</span>
-            ${copyBtn(escrow.Account, 'Sender Address Copied!')}
+            ${fmHtml}
             <i class="bi bi-arrow-right text-muted mx-1"></i>
             <span class="text-muted fw-bold" style="font-size: 0.62rem;">TO:</span>
-            <span class="text-secondary" title="${escrow.Destination}">${shortenAddress(escrow.Destination)}</span>
-            ${copyBtn(escrow.Destination, 'Recipient Address Copied!')}
+            ${toHtml}
           </div>
         `;
       }
