@@ -5696,6 +5696,61 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  const btnCrowdhdlConfigureSigners = document.getElementById('btnCrowdhdlConfigureSigners');
+  if (btnCrowdhdlConfigureSigners) {
+    btnCrowdhdlConfigureSigners.addEventListener('click', async () => {
+      if (!window.connectedAccount) {
+        showAlert('Please connect your wallet first to set up its signer list.', 'warning');
+        return;
+      }
+
+      const adminSignersStr = crowdhdlAdminSigners.value.trim();
+      const quorumInput = document.getElementById('crowdhdlAdminQuorum');
+      const quorum = parseInt(quorumInput?.value) || 2;
+      
+      const signers = adminSignersStr.split(',').map(s => s.trim()).filter(s => s.length > 0);
+      if (signers.length === 0) {
+        showAlert('Please provide comma-separated signer addresses for the admin multisig.', 'warning');
+        return;
+      }
+
+      btnCrowdhdlConfigureSigners.setAttribute('disabled', 'true');
+      btnCrowdhdlConfigureSigners.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Preparing payload...';
+
+      try {
+        const signerEntries = signers.map(signer => ({
+          SignerEntry: {
+            Account: signer,
+            SignerWeight: 1
+          }
+        }));
+
+        const txjson = {
+          TransactionType: 'SignerListSet',
+          Account: window.connectedAccount,
+          SignerQuorum: quorum,
+          SignerEntries: signerEntries
+        };
+
+        const resp = await fetch('/xumm/payload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ txjson })
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+        const payload = await resp.json();
+
+        showSubmittedModal(payload);
+
+      } catch (err) {
+        showAlert(`Failed to configure admin signers: ${err.message}`, 'error');
+      } finally {
+        btnCrowdhdlConfigureSigners.removeAttribute('disabled');
+        btnCrowdhdlConfigureSigners.innerHTML = '<i class="bi bi-person-plus-fill"></i> Deploy Signer List to Active Wallet';
+      }
+    });
+  }
+
   btnCrowdhdlPrepareRefund.addEventListener('click', async () => {
     const vault = crowdhdlVaultAddress.value.trim();
     const adminSignersStr = crowdhdlAdminSigners.value.trim();

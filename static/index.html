@@ -1223,10 +1223,21 @@
                         <!-- Project Admin Release Panel -->
                         <div class="border border-danger p-3 rounded bg-danger-subtle d-none" id="crowdhdlAdminPanel">
                           <h6 class="fw-bold text-danger-emphasis mb-2"><i class="bi bi-unlock-fill"></i> Admin Lock Release (Multisig Admins)</h6>
-                          <div class="mb-3">
-                            <label class="form-label small fw-bold">Admins Signer List (Comma-separated r-addresses)</label>
-                            <input type="text" id="crowdhdlAdminSigners" class="form-control form-control-sm" placeholder="rSigner1, rSigner2, ...">
-                          </div>
+                          <div class="row mb-3">
+                             <div class="col-md-8">
+                               <label class="form-label small fw-bold">Admins Signer List (Comma-separated r-addresses)</label>
+                               <input type="text" id="crowdhdlAdminSigners" class="form-control form-control-sm" placeholder="rSigner1, rSigner2, ...">
+                             </div>
+                             <div class="col-md-4">
+                               <label class="form-label small fw-bold">Quorum Threshold</label>
+                               <input type="number" id="crowdhdlAdminQuorum" class="form-control form-control-sm" value="2" min="1">
+                             </div>
+                           </div>
+                           <div class="d-grid mb-3">
+                             <button type="button" id="btnCrowdhdlConfigureSigners" class="btn btn-outline-danger btn-sm fw-semibold">
+                               <i class="bi bi-person-plus-fill"></i> Deploy Signer List to Active Wallet
+                             </button>
+                           </div>
                           <div class="mb-3">
                             <label class="form-label small fw-bold">Release Date & Time</label>
                             <input type="datetime-local" id="crowdhdlReleaseTime" class="form-control form-control-sm">
