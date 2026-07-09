@@ -129,22 +129,35 @@ function updateTemplateList() {
     grid.className = 'list-group list-group-flush border rounded shadow-sm overflow-hidden mt-2';
   }
 
+  const lastUsed = window.connectedAccount ? 
+    localStorage.getItem(`lastUsedTemplate_${window.connectedAccount}`) : 
+    localStorage.getItem('lastUsedTemplate_anonymous');
+
+  const TEMPLATE_CATEGORIES = {
+    'timed_escrow_create': 'escrow',
+    'conditional_escrow_create': 'escrow',
+    'oracle_price_threshold': 'escrow',
+    'token_payment': 'payment',
+    'trustline': 'payment',
+    'issue_token': 'payment',
+    'drop_tool': 'payment',
+    'enable_token_escrows': 'setup'
+  };
+
   for (const name of Object.keys(templates)) {
-    if (name === 'issue_token' || name === 'trustline' || name === 'enable_token_escrows') {
+    if (name === 'escrow_finish' || name === 'escrow_cancel') {
       continue;
     }
     const opt = document.createElement('option');
     opt.value = name;
     opt.textContent = getFriendlyTemplateName(name, templates[name]);
-    if (name === 'escrow_finish' || name === 'escrow_cancel') {
-      opt.style.display = 'none';
-    }
     frag.appendChild(opt);
 
-    if (grid && name !== 'escrow_finish' && name !== 'escrow_cancel') {
+    if (grid) {
       const rowItem = document.createElement('div');
       rowItem.className = 'list-group-item p-0 template-row border-bottom border-secondary-subtle';
       rowItem.dataset.name = name;
+      rowItem.dataset.category = TEMPLATE_CATEGORIES[name] || 'other';
 
       // Header part of the row
       const header = document.createElement('div');
@@ -159,9 +172,18 @@ function updateTemplateList() {
       icon.className = `bi ${getTemplateIcon(name)} fs-5 text-primary`;
       
       const title = document.createElement('span');
-      title.className = 'fw-bold text-dark-emphasis';
+      title.className = 'fw-bold text-dark-emphasis d-flex align-items-center gap-2';
       title.style.fontSize = '0.9rem';
       title.textContent = getFriendlyTemplateName(name, templates[name]);
+
+      if (name === lastUsed) {
+        const badge = document.createElement('span');
+        badge.className = 'badge bg-secondary-subtle text-secondary border border-secondary-subtle';
+        badge.style.fontSize = '0.62rem';
+        badge.style.padding = '0.2rem 0.4rem';
+        badge.textContent = 'Last Used';
+        title.appendChild(badge);
+      }
       
       leftPart.appendChild(icon);
       leftPart.appendChild(title);
@@ -230,6 +252,13 @@ function updateTemplateList() {
 
         // Select the template value
         sel.value = name;
+
+        // Remember last used escrow template type
+        if (window.connectedAccount) {
+          localStorage.setItem(`lastUsedTemplate_${window.connectedAccount}`, name);
+        } else {
+          localStorage.setItem('lastUsedTemplate_anonymous', name);
+        }
         
         // Move common elements beneath this row's contentArea
         const durationRow = document.getElementById('escrowDurationRow');
@@ -247,6 +276,44 @@ function updateTemplateList() {
         if (payloadResult) contentArea.appendChild(payloadResult);
         if (payloadPollingStatus) contentArea.appendChild(payloadPollingStatus);
 
+        // Raw JSON Template Preview Box
+        let jsonPreviewEl = contentArea.querySelector('.template-json-preview-container');
+        if (!jsonPreviewEl) {
+          jsonPreviewEl = document.createElement('div');
+          jsonPreviewEl.className = 'template-json-preview-container mt-2 mb-3';
+          
+          const previewBtn = document.createElement('button');
+          previewBtn.type = 'button';
+          previewBtn.className = 'btn btn-xs btn-outline-secondary py-1 px-2 mb-2 d-flex align-items-center gap-1';
+          previewBtn.style.fontSize = '0.7rem';
+          previewBtn.innerHTML = '<i class="bi bi-code-slash"></i> Preview Raw JSON Template';
+          
+          const previewBody = document.createElement('pre');
+          previewBody.className = 'bg-dark text-light p-3 rounded border border-secondary shadow-sm';
+          previewBody.style.fontSize = '0.75rem';
+          previewBody.style.maxHeight = '250px';
+          previewBody.style.overflow = 'auto';
+          previewBody.style.display = 'none';
+          
+          const updateJsonPreview = () => {
+            const rawTx = templates[name]?.txjson || {};
+            previewBody.textContent = JSON.stringify(rawTx, null, 2);
+          };
+          updateJsonPreview();
+          
+          previewBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const isHidden = previewBody.style.display === 'none';
+            previewBody.style.display = isHidden ? 'block' : 'none';
+            previewBtn.classList.toggle('btn-outline-secondary', !isHidden);
+            previewBtn.classList.toggle('btn-secondary', isHidden);
+          });
+          
+          jsonPreviewEl.appendChild(previewBtn);
+          jsonPreviewEl.appendChild(previewBody);
+        }
+        contentArea.appendChild(jsonPreviewEl);
+ 
         // Render the fields inside templateFields
         debounceRenderFields();
       };
@@ -263,6 +330,72 @@ function updateTemplateList() {
 
   sel.innerHTML = '';
   sel.appendChild(frag);
+
+  // Search & Category Filtering Logic
+  const searchInput = document.getElementById('templateSearchInput');
+  const catButtons = document.querySelectorAll('#templateCategories button[data-category]');
+
+  let activeCategory = 'all';
+  let searchQuery = '';
+
+  const applyFilters = () => {
+    document.querySelectorAll('.template-row').forEach(row => {
+      const rowName = row.dataset.name;
+      const category = row.dataset.category || '';
+      const text = row.querySelector('.fw-bold').textContent.toLowerCase();
+      const desc = (templates[rowName]?.description || '').toLowerCase();
+      
+      const matchesSearch = text.includes(searchQuery) || desc.includes(searchQuery);
+      const matchesCategory = activeCategory === 'all' || category === activeCategory;
+
+      if (matchesSearch && matchesCategory) {
+        row.style.setProperty('display', 'block', 'important');
+      } else {
+        row.style.setProperty('display', 'none', 'important');
+      }
+    });
+  };
+
+  if (searchInput) {
+    // Clone and replace to prevent duplicate event listeners on re-renders
+    const newSearchInput = searchInput.cloneNode(true);
+    searchInput.parentNode.replaceChild(newSearchInput, searchInput);
+    
+    newSearchInput.addEventListener('input', (e) => {
+      searchQuery = e.target.value.toLowerCase().trim();
+      applyFilters();
+    });
+  }
+
+  if (catButtons.length > 0) {
+    catButtons.forEach(btn => {
+      const newBtn = btn.cloneNode(true);
+      btn.parentNode.replaceChild(newBtn, btn);
+      
+      newBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.querySelectorAll('#templateCategories button').forEach(b => {
+          b.classList.remove('btn-primary', 'active-category-btn');
+          b.classList.add('btn-outline-secondary');
+        });
+        newBtn.classList.remove('btn-outline-secondary');
+        newBtn.classList.add('btn-primary', 'active-category-btn');
+        activeCategory = newBtn.dataset.category;
+        applyFilters();
+      });
+    });
+  }
+
+  // Auto-expand last used template on first load
+  if (lastUsed) {
+    setTimeout(() => {
+      const lastRow = document.querySelector(`.template-row[data-name="${lastUsed}"]`);
+      if (lastRow && !document.querySelector('.active-template-row')) {
+        const hdr = lastRow.querySelector('div');
+        if (hdr) hdr.click();
+      }
+    }, 150);
+  }
 }
 
 function sanitizeId(name) {
@@ -636,7 +769,7 @@ function renderFields() {
     const safeId = sanitizeId(k);
 
     // Hide specific fields from the UI but keep them in the DOM for payload generation
-    if (k === 'FINISH_AFTER' || k === 'CANCEL_AFTER' || k === 'CONDITION') {
+    if (k === 'FINISH_AFTER' || k === 'CANCEL_AFTER' || (k === 'CONDITION' && name !== 'conditional_escrow_create')) {
       const hiddenInput = document.createElement('input');
       hiddenInput.type = 'hidden';
       hiddenInput.id = safeId;
@@ -725,8 +858,7 @@ function renderFields() {
 
       const TOKEN_PRESETS = [
         { name: 'RLUSD (Testnet)', currency: 'RLU', issuer: 'rQh82YKiEBBUJrxYLsLs32cB271F24Z5F3' },
-        { name: 'USD (Testnet)', currency: 'USD', issuer: 'rP47j4JpxD9FfS4c2kPdJ6V6V6rM5rM5' },
-        { name: 'EUR (Testnet)', currency: 'EUR', issuer: 'rP47j4JpxD9FfS4c2kPdJ6V6V6rM5rM5' }
+        { name: 'RLUSD (Mainnet)', currency: '524C555344000000000000000000000000000000', issuer: 'rMxouZkuiKo7BYd3nnzhW4g5tZpJwVnGry' }
       ];
 
       TOKEN_PRESETS.forEach(p => {
@@ -758,6 +890,24 @@ function renderFields() {
       tokenValInput.placeholder = 'Amount';
       tokenValCol.appendChild(tokenValInput);
 
+      // Amount Presets for Token
+      const tokenValPresets = document.createElement('div');
+      tokenValPresets.className = 'd-flex flex-wrap gap-1 mt-1';
+      [10, 100, 1000, 10000].forEach(p => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-xs btn-outline-secondary py-0 px-2 rounded';
+        btn.style.fontSize = '0.7rem';
+        btn.textContent = `${p}`;
+        btn.addEventListener('click', () => {
+          tokenValInput.value = String(p);
+          tokenValInput.dispatchEvent(new Event('input', { bubbles: true }));
+          tokenValInput.dispatchEvent(new Event('blur', { bubbles: true }));
+        });
+        tokenValPresets.appendChild(btn);
+      });
+      tokenValCol.appendChild(tokenValPresets);
+
       const tokenCurCol = document.createElement('div');
       tokenCurCol.className = 'col-md-4 col-xl-3';
       const tokenCurInput = document.createElement('input');
@@ -765,7 +915,19 @@ function renderFields() {
       tokenCurInput.className = 'form-control';
       tokenCurInput.id = 'field_AMOUNT_CURRENCY';
       tokenCurInput.placeholder = 'Currency Code';
+      
+      const curListId = 'popular_amount_currencies';
+      const curDatalist = document.createElement('datalist');
+      curDatalist.id = curListId;
+      const popularCurs = ['RLU', 'USD', 'EUR', 'SOLO', 'CORE', '524C555344000000000000000000000000000000'];
+      popularCurs.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c;
+        curDatalist.appendChild(opt);
+      });
+      tokenCurInput.setAttribute('list', curListId);
       tokenCurCol.appendChild(tokenCurInput);
+      tokenCurCol.appendChild(curDatalist);
 
       const tokenIssCol = document.createElement('div');
       tokenIssCol.className = 'col-md-4 col-xl-5';
@@ -823,6 +985,24 @@ function renderFields() {
       mptValInput.className = 'form-control';
       mptValInput.placeholder = 'MPT Amount (Integer)';
       mptValCol.appendChild(mptValInput);
+
+      // Amount Presets for MPT
+      const mptValPresets = document.createElement('div');
+      mptValPresets.className = 'd-flex flex-wrap gap-1 mt-1';
+      [1, 5, 10, 50, 100].forEach(p => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-xs btn-outline-secondary py-0 px-2 rounded';
+        btn.style.fontSize = '0.7rem';
+        btn.textContent = `${p}`;
+        btn.addEventListener('click', () => {
+          mptValInput.value = String(p);
+          mptValInput.dispatchEvent(new Event('input', { bubbles: true }));
+          mptValInput.dispatchEvent(new Event('blur', { bubbles: true }));
+        });
+        mptValPresets.appendChild(btn);
+      });
+      mptValCol.appendChild(mptValPresets);
 
       const mptIdCol = document.createElement('div');
       mptIdCol.className = 'col-md-8';
@@ -1021,8 +1201,17 @@ function renderFields() {
     input.className = 'form-control';
     input.placeholder = 'Enter ' + friendlyLabel;
 
+    // Auto-fill connected account if available
+    if ((k === 'ACCOUNT' || k === 'OWNER') && window.connectedAccount) {
+      input.value = window.connectedAccount;
+      input.classList.add('is-valid');
+      setTimeout(() => {
+        showValidCheck(input);
+      }, 50);
+    }
+
     // Address autocomplete history
-    if (['ACCOUNT', 'DESTINATION', 'OWNER'].some(key => sanitizeId(key) === input.id)) {
+    if (['ACCOUNT', 'DESTINATION', 'OWNER', 'ISSUER'].some(key => sanitizeId(key) === input.id)) {
       const listId = input.id + '_history';
       const datalist = document.createElement('datalist');
       datalist.id = listId;
@@ -1036,19 +1225,90 @@ function renderFields() {
       col.appendChild(datalist);
     }
 
+    // Special popular currencies autocomplete list & preset badges for CURRENCY fields
+    if (k === 'CURRENCY') {
+      const curListId = 'popular_currencies_autocomplete';
+      const curDatalist = document.createElement('datalist');
+      curDatalist.id = curListId;
+      const popularCurs = ['RLU', 'USD', 'EUR', 'SOLO', 'CORE', '524C555344000000000000000000000000000000'];
+      popularCurs.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c;
+        curDatalist.appendChild(opt);
+      });
+      input.setAttribute('list', curListId);
+      col.appendChild(curDatalist);
+
+      const presetsBar = document.createElement('div');
+      presetsBar.className = 'd-flex flex-wrap gap-1 align-items-center bg-body-tertiary p-2 rounded border mt-2';
+      presetsBar.innerHTML = '<small class="text-muted fw-bold me-2"><i class="bi bi-tags"></i> Presets:</small>';
+
+      const presets = [
+        { name: 'RLUSD (Testnet)', currency: 'RLU', issuer: 'rQh82YKiEBBUJrxYLsLs32cB271F24Z5F3' },
+        { name: 'RLUSD (Mainnet)', currency: '524C555344000000000000000000000000000000', issuer: 'rMxouZkuiKo7BYd3nnzhW4g5tZpJwVnGry' }
+      ];
+
+      presets.forEach(p => {
+        const badge = document.createElement('button');
+        badge.type = 'button';
+        badge.className = 'btn btn-xs btn-outline-info py-0 px-2 rounded-pill fw-medium';
+        badge.style.fontSize = '0.68rem';
+        badge.textContent = p.name;
+        badge.addEventListener('click', (e) => {
+          e.preventDefault();
+          input.value = p.currency;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('blur', { bubbles: true }));
+          
+          const issInp = document.getElementById('field_ISSUER');
+          if (issInp) {
+            issInp.value = p.issuer;
+            issInp.dispatchEvent(new Event('input', { bubbles: true }));
+            issInp.dispatchEvent(new Event('blur', { bubbles: true }));
+          }
+        });
+        presetsBar.appendChild(badge);
+      });
+      col.appendChild(presetsBar);
+    }
+
     // Remove validation error border on input
     input.addEventListener('input', () => {
       input.classList.remove('is-invalid');
       removeValidCheck(input);
       
-      // Real-time validation for address fields
-      if (['ACCOUNT', 'DESTINATION', 'OWNER', 'AMOUNT_ISSUER'].some(k => sanitizeId(k) === input.id)) {
+      // Real-time validation for fields
+      if (['ACCOUNT', 'DESTINATION', 'OWNER', 'AMOUNT_ISSUER', 'ISSUER'].some(k => sanitizeId(k) === input.id)) {
         const addr = input.value.trim();
         if (addr.length >= 25 && isValidXRPLAddressFormat(addr)) {
           input.classList.add('is-valid');
           showValidCheck(input);
           recordAddressInHistory(addr);
         } else if (addr.length > 0) {
+          input.classList.remove('is-valid');
+        }
+      } else if (input.id === 'field_CONDITION') {
+        const hexVal = input.value.trim();
+        if (/^[0-9a-fA-F]{64,128}$/.test(hexVal) && hexVal.length % 2 === 0) {
+          input.classList.add('is-valid');
+          showValidCheck(input);
+        } else {
+          input.classList.remove('is-valid');
+        }
+      } else if (input.id === 'field_FULFILLMENT') {
+        const hexVal = input.value.trim();
+        if (/^[0-9a-fA-F]{2,256}$/.test(hexVal) && hexVal.length % 2 === 0) {
+          input.classList.add('is-valid');
+          showValidCheck(input);
+        } else {
+          input.classList.remove('is-valid');
+        }
+      } else if (input.id === 'field_CURRENCY') {
+        const curVal = input.value.trim();
+        if (curVal.length === 3 || (curVal.length === 40 && /^[0-9a-fA-F]{40}$/.test(curVal))) {
+          input.classList.add('is-valid');
+          showValidCheck(input);
+        } else {
           input.classList.remove('is-valid');
         }
       }
@@ -1061,8 +1321,8 @@ function renderFields() {
         setFieldError(input, `${friendlyLabel} is required.`);
       } else if (input.value.trim()) {
         const addr = input.value.trim();
-        // For address fields, validate format
-        if (['ACCOUNT', 'DESTINATION', 'OWNER', 'AMOUNT_ISSUER'].some(k => sanitizeId(k) === input.id)) {
+        // Validate format based on field type
+        if (['ACCOUNT', 'DESTINATION', 'OWNER', 'AMOUNT_ISSUER', 'ISSUER'].some(k => sanitizeId(k) === input.id)) {
           if (isValidXRPLAddressFormat(addr)) {
             input.classList.add('is-valid');
             showValidCheck(input);
@@ -1070,6 +1330,33 @@ function renderFields() {
           } else {
             input.classList.add('is-invalid');
             setFieldError(input, `Invalid XRPL address format. Must be 25-34 characters starting with 'r'.`);
+          }
+        } else if (input.id === 'field_CONDITION') {
+          const hexVal = input.value.trim();
+          if (/^[0-9a-fA-F]{64,128}$/.test(hexVal) && hexVal.length % 2 === 0) {
+            input.classList.add('is-valid');
+            showValidCheck(input);
+          } else {
+            input.classList.add('is-invalid');
+            setFieldError(input, 'Condition must be a valid hex string between 64 and 128 characters (even length).');
+          }
+        } else if (input.id === 'field_FULFILLMENT') {
+          const hexVal = input.value.trim();
+          if (/^[0-9a-fA-F]{2,256}$/.test(hexVal) && hexVal.length % 2 === 0) {
+            input.classList.add('is-valid');
+            showValidCheck(input);
+          } else {
+            input.classList.add('is-invalid');
+            setFieldError(input, 'Fulfillment must be a valid hex string between 2 and 256 characters (even length).');
+          }
+        } else if (input.id === 'field_CURRENCY') {
+          const curVal = input.value.trim();
+          if (curVal.length === 3 || (curVal.length === 40 && /^[0-9a-fA-F]{40}$/.test(curVal))) {
+            input.classList.add('is-valid');
+            showValidCheck(input);
+          } else {
+            input.classList.add('is-invalid');
+            setFieldError(input, 'Currency must be a 3-character code (e.g. USD) or 40-character hex string.');
           }
         } else {
           input.classList.remove('is-invalid');
@@ -1878,6 +2165,26 @@ function stopPayloadPolling() {
   payloadPollingUuid = null;
 }
 
+function getXrplErrorExplanation(code) {
+  const explanations = {
+    'temBAD_FEE': 'The transaction fee specified is invalid or too low for current network conditions.',
+    'tecNO_DST_INSUF_XRP': 'The destination account does not exist, and the amount sent is not enough to fund the account reserve (requires 10 XRP).',
+    'tecNO_LINE': 'The destination account does not have a trustline established for this token.',
+    'tecNO_LINE_INSUF_RESERVE': 'The destination account cannot accept this token due to insufficient XRP reserve to create a new trustline.',
+    'tecNO_DST': 'The destination account does not exist on the ledger.',
+    'tecPATH_DRY': 'Unable to find a payment path to exchange the tokens between the sender and recipient.',
+    'tecINSUFFICIENT_FUNDS': 'The sending account has insufficient funds to complete this transaction.',
+    'tecUNFUNDED_PAYMENT': 'The sending account does not have enough funds to complete this transaction.',
+    'tecUNFUNDED_ADD': 'The sending account has insufficient funds to fulfill the trustline limit.',
+    'tecOWNERS': 'The account has too many ledger entries or cannot be deleted/modified.',
+    'tefALREADY': 'This exact transaction has already been applied to the ledger.',
+    'tefBAD_AUTH_MASTER': 'The master key is disabled, and no regular key or multi-signature was used.',
+    'tefPAST_SEQ': 'The transaction sequence number has already been passed/used.',
+    'terQUEUED': 'The transaction has been queued and will be retried in a future ledger.',
+  };
+  return explanations[code] || 'An on-chain verification error occurred. Please verify your account balances and inputs.';
+}
+
 async function pollPayloadStatus(uuid) {
   if (!uuid) return;
   try {
@@ -1898,9 +2205,23 @@ async function pollPayloadStatus(uuid) {
             let vMsg = '✅ Status Update: Transaction signed and verified securely.';
             let isHtml = false;
             if (vData.remote && vData.remote.xrpl_submission) {
-              const engineRes = vData.remote.xrpl_submission.result?.engine_result || 'Unknown';
-              const txHash = vData.remote.xrpl_submission.result?.tx_json?.hash;
-              vMsg += `<br>🚀 XRPL Submission: <strong>${engineRes}</strong>`;
+              const result = vData.remote.xrpl_submission.result || {};
+              const engineRes = result.engine_result || 'Unknown';
+              const engineMsg = result.engine_result_message || '';
+              const txHash = result.tx_json?.hash;
+              
+              if (engineRes === 'tesSUCCESS' || engineRes === 'terQUEUED') {
+                vMsg = '✅ Status Update: Transaction applied successfully on-chain!';
+                vMsg += `<br>🚀 XRPL Submission: <strong class="text-success">${engineRes}</strong>`;
+                if (engineMsg) vMsg += `<br><small class="text-muted">${engineMsg}</small>`;
+              } else {
+                const explanation = getXrplErrorExplanation(engineRes);
+                vMsg = '❌ Status Update: Transaction rejected by XRPL ledger.';
+                vMsg += `<br>🚀 XRPL Error: <strong class="text-danger">${engineRes}</strong>`;
+                if (explanation) vMsg += `<br><span class="text-warning small">${explanation}</span>`;
+                if (engineMsg) vMsg += `<br><small class="text-muted">(${engineMsg})</small>`;
+              }
+              
               if (txHash) {
                 vMsg += `<br>🔗 Hash: <code>${txHash}</code> <a href="https://testnet.xrpl.org/transactions/${txHash}" target="_blank" class="ms-1">(Testnet)</a> <a href="https://livenet.xrpl.org/transactions/${txHash}" target="_blank" class="ms-1">(Mainnet)</a>`;
               }
@@ -2673,7 +2994,12 @@ document.getElementById('buildPayload').addEventListener('click', async (e) => {
     });
     if (feeResp.ok) {
       const feeData = await feeResp.json();
-      const userConfirmed = confirm(`Estimated network fee for this transaction is ${Number(feeData.estimated_fee_drops).toLocaleString()} drops.\n\nProceed to ask XUMM to sign it?`);
+      const feeDrops = Number(feeData.estimated_fee_drops);
+      let confirmMsg = `Estimated network fee for this transaction is ${feeDrops.toLocaleString()} drops.\n\nProceed to ask XUMM to sign it?`;
+      if (feeDrops > 100000) {
+        confirmMsg = `⚠️ WARNING: High Network Fee Detected!\n\nThe estimated fee is ${(feeDrops / 1000000)} XRP (${feeDrops.toLocaleString()} drops), which is unusually high.\n\nAre you sure you want to proceed and request signature?`;
+      }
+      const userConfirmed = confirm(confirmMsg);
       if (!userConfirmed) {
         setSpinner(buildSpinner, false);
         return;
@@ -2903,7 +3229,12 @@ async function updateDashboard(account) {
       
       await renderActiveEscrows(account, dashEscrowsContainer, escrows);
     } catch (err) {
-      dashEscrowsContainer.innerHTML = '<div class="alert alert-danger mb-0">Error scanning escrows.</div>';
+      dashEscrowsContainer.innerHTML = `
+        <div class="alert alert-danger mb-0 d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <span><i class="bi bi-wifi-off me-2"></i> Error scanning escrows: ${escapeHtml(err.message || String(err))}</span>
+          <button class="btn btn-sm btn-danger py-1 px-3" onclick="updateDashboard('${account}')"><i class="bi bi-arrow-clockwise"></i> Retry</button>
+        </div>
+      `;
     }
   }
 }
@@ -2953,6 +3284,20 @@ function updateXamanUI(account) {
   }
 
   updateDashboard(account);
+
+  // Auto-fill form fields if a template is currently open and inputs are empty
+  const accountInput = document.getElementById('field_ACCOUNT');
+  if (accountInput && !accountInput.value) {
+    accountInput.value = account;
+    accountInput.dispatchEvent(new Event('input', { bubbles: true }));
+    accountInput.dispatchEvent(new Event('blur', { bubbles: true }));
+  }
+  const ownerInput = document.getElementById('field_OWNER');
+  if (ownerInput && !ownerInput.value) {
+    ownerInput.value = account;
+    ownerInput.dispatchEvent(new Event('input', { bubbles: true }));
+    ownerInput.dispatchEvent(new Event('blur', { bubbles: true }));
+  }
 }
 
 if (window.connectedAccount) {
@@ -3181,6 +3526,10 @@ if (connectXamanBtnEl) {
       if (feeResp.ok) {
         const feeData = await feeResp.json();
         txjson.Fee = String(feeData.estimated_fee_drops);
+        if (Number(feeData.estimated_fee_drops) > 100000) {
+          const proceed = confirm(`⚠️ Warning: High Network Fee!\n\nThe estimated fee is ${(Number(feeData.estimated_fee_drops) / 1000000)} XRP, which is unusually high.\n\nDo you want to proceed anyway?`);
+          if (!proceed) throw new Error("Transaction cancelled due to high network fee.");
+        }
       }
 
       // Send to XUMM
@@ -3315,7 +3664,7 @@ async function fetchActiveEscrows(account) {
   } catch (err) {
     console.error("Failed to fetch active escrows:", err);
     showAlert('Error fetching active escrows: ' + String(err), 'error');
-    return [];
+    throw err;
   }
 }
 
@@ -3368,6 +3717,17 @@ function triggerEscrowAction(actionTemplate, escrow) {
 }
 
 async function executeDirectEscrowAction(action, escrow) {
+  // Safeguard: Check if user is attempting to cancel a time-locked escrow before expiration
+  if (action === 'escrow_cancel') {
+    const nowUnix = Math.floor(Date.now() / 1000) - 946684800; // XRPL Epoch seconds
+    if (escrow.CancelAfter && nowUnix < escrow.CancelAfter) {
+      const remainingSecs = escrow.CancelAfter - nowUnix;
+      const hours = (remainingSecs / 3600).toFixed(1);
+      const confirmCancel = confirm(`⚠️ Warning: Expiration Lock Still Active!\n\nThis escrow is not scheduled to expire for another ${hours} hours.\n\nAre you sure you want to attempt this cancellation anyway? (It will likely be rejected by the XRPL ledger).`);
+      if (!confirmCancel) return;
+    }
+  }
+
   // If the escrow has a condition, the user must provide a Fulfillment. Direct them to the builder.
   if (action === 'escrow_finish' && escrow.Condition) {
     triggerEscrowAction(action, escrow);
@@ -3413,6 +3773,10 @@ async function executeDirectEscrowAction(action, escrow) {
     if (feeResp.ok) {
       const feeData = await feeResp.json();
       txjson.Fee = String(feeData.estimated_fee_drops);
+      if (Number(feeData.estimated_fee_drops) > 100000) {
+        const proceed = confirm(`⚠️ Warning: High Network Fee!\n\nThe estimated fee is ${(Number(feeData.estimated_fee_drops) / 1000000)} XRP, which is unusually high.\n\nDo you want to proceed anyway?`);
+        if (!proceed) throw new Error("Transaction cancelled due to high network fee.");
+      }
     }
 
     const reqBody = { 
@@ -3452,6 +3816,120 @@ async function executeDirectEscrowAction(action, escrow) {
   }
 }
 
+// --- CSV Export Helper ---
+function exportEscrowsToCSV(escrows, accountAddress) {
+  if (!escrows || escrows.length === 0) return;
+  
+  const headers = ['Escrow Index/ID', 'Sender (Account)', 'Recipient (Destination)', 'Amount', 'Asset/Currency', 'FinishAfter (Unix)', 'CancelAfter (Unix)', 'Condition (Hex)'];
+  const rows = escrows.map(escrow => {
+    let amountVal = '0';
+    let assetStr = 'XRP';
+    if (typeof escrow.Amount === 'string') {
+      amountVal = Number(escrow.Amount) / 1000000;
+      assetStr = 'XRP';
+    } else if (typeof escrow.Amount === 'object' && escrow.Amount !== null) {
+      amountVal = escrow.Amount.value || '0';
+      assetStr = escrow.Amount.currency ? decodeCurrencyCode(escrow.Amount.currency) : 'Token';
+    }
+    
+    return [
+      escrow.index || '',
+      escrow.Account || '',
+      escrow.Destination || '',
+      amountVal,
+      assetStr,
+      escrow.FinishAfter || '',
+      escrow.CancelAfter || '',
+      escrow.Condition || ''
+    ];
+  });
+  
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))
+  ].join('\n');
+  
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `escrow_history_${accountAddress || 'scan'}.csv`);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// --- Live Ticking Countdown Helpers ---
+function formatSecondsToRelative(diff) {
+  if (diff <= 0) return '0s';
+  const days = Math.floor(diff / 86400);
+  const hours = Math.floor((diff % 86400) / 3600);
+  const mins = Math.floor((diff % 3600) / 60);
+  const secs = diff % 60;
+  
+  if (days > 0) return `${days}d ${hours}h ${mins}m`;
+  if (hours > 0) return `${hours}h ${mins}m ${secs}s`;
+  return `${mins}m ${secs}s`;
+}
+
+function startLiveCountdownTimer() {
+  if (window.liveCountdownTimer) clearInterval(window.liveCountdownTimer);
+  window.liveCountdownTimer = setInterval(() => {
+    const nowUnix = Math.floor(Date.now() / 1000);
+    const xrplNow = nowUnix - 946684800; // XRPL Epoch seconds
+    
+    document.querySelectorAll('.escrow-countdown-timer').forEach(el => {
+      const finishAfter = el.dataset.finish ? Number(el.dataset.finish) : null;
+      const cancelAfter = el.dataset.cancel ? Number(el.dataset.cancel) : null;
+      
+      let text = '';
+      if (finishAfter && xrplNow < finishAfter) {
+        text = `unlocks in ${formatSecondsToRelative(finishAfter - xrplNow)}`;
+      } else if (cancelAfter && xrplNow < cancelAfter) {
+        text = `expires in ${formatSecondsToRelative(cancelAfter - xrplNow)}`;
+      } else if (cancelAfter && xrplNow >= cancelAfter) {
+        text = 'Expired';
+      } else {
+        text = 'Ready';
+      }
+      el.textContent = `(${text})`;
+    });
+
+    document.querySelectorAll('.escrow-progress-container').forEach(el => {
+      const finishAfter = el.dataset.finish ? Number(el.dataset.finish) : null;
+      const cancelAfter = el.dataset.cancel ? Number(el.dataset.cancel) : null;
+      const progressBar = el.querySelector('.progress-bar');
+      const progressLabel = el.querySelector('.progress-label');
+      const progressText = el.querySelector('.progress-text');
+      
+      if (!progressBar || !progressLabel) return;
+      
+      let progressPct = 100;
+      let progressColor = 'bg-success';
+      let label = 'Ready to Claim!';
+      
+      if (finishAfter && xrplNow < finishAfter) {
+        const remaining = finishAfter - xrplNow;
+        const duration = 86400;
+        const elapsed = Math.max(0, duration - remaining);
+        progressPct = Math.min(95, Math.floor((elapsed / duration) * 100));
+        progressColor = 'bg-primary progress-bar-striped progress-bar-animated';
+        label = `Locked (unlocks in ${formatSecondsToRelative(finishAfter - xrplNow)})`;
+      } else if (cancelAfter && xrplNow >= cancelAfter) {
+        progressPct = 100;
+        progressColor = 'bg-danger';
+        label = 'Expired (Refundable)';
+      }
+      
+      progressBar.className = `progress-bar ${progressColor}`;
+      progressBar.style.width = `${progressPct}%`;
+      progressLabel.innerHTML = label;
+      if (progressText) progressText.textContent = `${progressPct}%`;
+    });
+  }, 1000);
+}
+
 async function renderActiveEscrows(account, container, preFetchedEscrows = null) {
   if (!container) return;
 
@@ -3459,6 +3937,31 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
   
   let escrows = preFetchedEscrows || await fetchActiveEscrows(account);
   container.innerHTML = '';
+
+  // Save to global window for CSV export and background ticking
+  window.currentEscrows = escrows;
+
+  // Show/Hide CSV export button and bind event
+  const exportBtn = document.getElementById('btnExportEscrowsCSV');
+  if (exportBtn) {
+    if (escrows.length > 0) {
+      exportBtn.classList.remove('d-none');
+      const newExportBtn = exportBtn.cloneNode(true);
+      exportBtn.parentNode.replaceChild(newExportBtn, exportBtn);
+      newExportBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        exportEscrowsToCSV(escrows, account);
+      });
+    } else {
+      exportBtn.classList.add('d-none');
+    }
+  }
+
+  // Update Last Synced Time
+  const syncTimeEl = document.getElementById('dashboardSyncTime');
+  if (syncTimeEl) {
+    syncTimeEl.textContent = `Last synced: ${new Date().toLocaleTimeString()}`;
+  }
 
   if (escrows.length === 0) {
     container.innerHTML = '<div class="alert alert-info mb-0">No active escrows found for this account on the ledger.</div>';
@@ -3468,8 +3971,6 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
   // Sort escrows by release date (FinishAfter) or amount
   const sortType = localStorage.getItem('escrowSortType') || 'release_soonest';
   escrows = [...escrows].sort((a, b) => {
-    // Release date sort: use FinishAfter (the unlock/release timestamp).
-    // Escrows without a FinishAfter fall back to CancelAfter, then sort to end.
     const getReleaseTime = (esc) => {
       if (esc.FinishAfter !== undefined && esc.FinishAfter !== null) {
         return Number(esc.FinishAfter);
@@ -3491,16 +3992,16 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
       const ta = getReleaseTime(a);
       const tb = getReleaseTime(b);
       if (ta === null && tb === null) return 0;
-      if (ta === null) return 1;  // no release date → end
+      if (ta === null) return 1;
       if (tb === null) return -1;
-      return ta - tb;  // earlier release first
+      return ta - tb;
     } else if (sortType === 'release_latest') {
       const ta = getReleaseTime(a);
       const tb = getReleaseTime(b);
       if (ta === null && tb === null) return 0;
       if (ta === null) return 1;
       if (tb === null) return -1;
-      return tb - ta;  // later release first
+      return tb - ta;
     } else if (sortType === 'amount_desc') {
       return getAmountDrops(b) - getAmountDrops(a);
     } else if (sortType === 'amount_asc') {
@@ -3520,7 +4021,7 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
     const targetUnix = epochSeconds + 946684800;
     const diff = targetUnix - nowUnix;
     
-    if (diff <= 0) return '<span class="text-success fw-bold">Ready</span>';
+    if (diff <= 0) return 'Ready';
     
     const days = Math.floor(diff / 86400);
     const hours = Math.floor((diff % 86400) / 3600);
@@ -3531,7 +4032,7 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
     else if (hours > 0) str += `${hours}h ${mins}m`;
     else str += `${mins}m`;
     
-    return `<span class="fw-medium">${str}</span>`;
+    return str;
   };
 
   if (window.escrowViewType === 'list') {
@@ -3620,10 +4121,10 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
       
       let timeHtml = '<div class="d-flex flex-column gap-1" style="font-size: 0.75rem;">';
       if (escrow.FinishAfter) {
-         timeHtml += `<div class="text-success"><i class="bi bi-unlock-fill me-1"></i><strong>Unlocks:</strong> ${formatTime(escrow.FinishAfter)} <span style="color: #b0b8c4; font-weight: 500;">(${getRelativeTimeHtml(escrow.FinishAfter)})</span></div>`;
+         timeHtml += `<div class="text-success"><i class="bi bi-unlock-fill me-1"></i><strong>Unlocks:</strong> ${formatTime(escrow.FinishAfter)} <span class="escrow-countdown-timer text-secondary fw-semibold" data-finish="${escrow.FinishAfter}">(${getRelativeTimeHtml(escrow.FinishAfter)})</span></div>`;
       }
       if (escrow.CancelAfter) {
-         timeHtml += `<div class="text-warning"><i class="bi bi-hourglass-split me-1"></i><strong>Expires:</strong> ${formatTime(escrow.CancelAfter)} <span style="color: #b0b8c4; font-weight: 500;">(${getRelativeTimeHtml(escrow.CancelAfter)})</span></div>`;
+         timeHtml += `<div class="text-warning"><i class="bi bi-hourglass-split me-1"></i><strong>Expires:</strong> ${formatTime(escrow.CancelAfter)} <span class="escrow-countdown-timer text-secondary fw-semibold" data-cancel="${escrow.CancelAfter}">(${getRelativeTimeHtml(escrow.CancelAfter)})</span></div>`;
       }
       if (escrow.Condition) {
          timeHtml += `<div class="text-info"><i class="bi bi-key-fill me-1"></i><strong>Condition Required</strong></div>`;
@@ -3644,7 +4145,7 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
         const elapsed = Math.max(0, duration - remaining);
         progressPct = Math.min(95, Math.floor((elapsed / duration) * 100));
         progressColor = 'bg-primary progress-bar-striped progress-bar-animated';
-        const rText = getRelativeTimeHtml(escrow.FinishAfter).replace(/<[^>]*>/g, '');
+        const rText = getRelativeTimeHtml(escrow.FinishAfter);
         progressLabel = `Locked (${rText})`;
       } else if (escrow.CancelAfter && nowVal >= escrow.CancelAfter) {
         progressPct = 100;
@@ -3657,10 +4158,10 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
       }
       
       const progressBarHtml = `
-        <div style="min-width: 130px;">
+        <div style="min-width: 130px;" class="escrow-progress-container" data-finish="${escrow.FinishAfter || ''}" data-cancel="${escrow.CancelAfter || ''}">
           <div class="d-flex justify-content-between mb-1" style="font-size: 0.65rem;">
-            <span class="fw-semibold text-secondary">${progressLabel}</span>
-            <span class="text-secondary fw-semibold">${progressPct}%</span>
+            <span class="fw-semibold text-secondary progress-label">${progressLabel}</span>
+            <span class="text-secondary fw-semibold progress-text">${progressPct}%</span>
           </div>
           <div class="progress" style="height: 5px;">
             <div class="progress-bar ${progressColor}" role="progressbar" style="width: ${progressPct}%" aria-valuenow="${progressPct}" aria-valuemin="0" aria-valuemax="100"></div>
@@ -3746,7 +4247,7 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
              <i class="bi bi-unlock-fill me-2 fs-6"></i>
              <div>
                <strong>Unlocks:</strong> ${formatTime(escrow.FinishAfter)} 
-               <span class="ms-1" style="color: #b0b8c4; font-weight: 500;">(${getRelativeTimeHtml(escrow.FinishAfter)})</span>
+               <span class="escrow-countdown-timer ms-1 text-secondary fw-semibold" data-finish="${escrow.FinishAfter}">(${getRelativeTimeHtml(escrow.FinishAfter)})</span>
              </div>
            </li>`;
       }
@@ -3756,7 +4257,7 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
              <i class="bi bi-hourglass-split me-2 fs-6"></i>
              <div>
                <strong>Expires:</strong> ${formatTime(escrow.CancelAfter)} 
-               <span class="ms-1" style="color: #b0b8c4; font-weight: 500;">(${getRelativeTimeHtml(escrow.CancelAfter)})</span>
+               <span class="escrow-countdown-timer ms-1 text-secondary fw-semibold" data-cancel="${escrow.CancelAfter}">(${getRelativeTimeHtml(escrow.CancelAfter)})</span>
              </div>
            </li>`;
       }
@@ -3822,33 +4323,32 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
                let progressLabel = '';
 
                if (escrow.FinishAfter && nowVal < escrow.FinishAfter) {
-                 // Locked countdown
                  const remaining = escrow.FinishAfter - nowVal;
-                 const duration = 86400; // default to 24h locked window for scale
+                 const duration = 86400;
                  const elapsed = Math.max(0, duration - remaining);
-                 progressPct = Math.min(95, Math.floor((elapsed / duration) * 100)); // cap locked at 95%
+                 progressPct = Math.min(95, Math.floor((elapsed / duration) * 100));
                  progressColor = 'bg-primary progress-bar-striped progress-bar-animated';
-                 const rText = getRelativeTimeHtml(escrow.FinishAfter).replace(/<[^>]*>/g, '');
+                 const rText = getRelativeTimeHtml(escrow.FinishAfter);
                  progressLabel = `<i class="bi bi-lock-fill text-primary"></i> Locked (Release ${rText})`;
                } else if (escrow.CancelAfter && nowVal >= escrow.CancelAfter) {
-                 // Expired
                  progressPct = 100;
                  progressColor = 'bg-danger';
                  progressLabel = '<i class="bi bi-exclamation-triangle-fill text-danger"></i> Expired (Refundable)';
                } else {
-                 // Claimable
                  progressPct = 100;
                  progressColor = 'bg-success';
                  progressLabel = '<i class="bi bi-unlock-fill text-success"></i> Ready to Claim!';
                }
 
                return `
-                 <div class="d-flex justify-content-between mb-1 small">
-                   <span class="fw-semibold text-secondary" style="font-size: 0.72rem;">${progressLabel}</span>
-                   <span class="text-secondary fw-semibold" style="font-size: 0.7rem;">${progressPct}%</span>
-                 </div>
-                 <div class="progress" style="height: 6px;">
-                   <div class="progress-bar ${progressColor}" role="progressbar" style="width: ${progressPct}%" aria-valuenow="${progressPct}" aria-valuemin="0" aria-valuemax="100"></div>
+                 <div class="escrow-progress-container" data-finish="${escrow.FinishAfter || ''}" data-cancel="${escrow.CancelAfter || ''}">
+                   <div class="d-flex justify-content-between mb-1 small">
+                     <span class="fw-semibold text-secondary progress-label" style="font-size: 0.72rem;">${progressLabel}</span>
+                     <span class="text-secondary fw-semibold progress-text" style="font-size: 0.7rem;">${progressPct}%</span>
+                   </div>
+                   <div class="progress" style="height: 6px;">
+                     <div class="progress-bar ${progressColor}" role="progressbar" style="width: ${progressPct}%" aria-valuenow="${progressPct}" aria-valuemin="0" aria-valuemax="100"></div>
+                   </div>
                  </div>
                `;
              })()}
@@ -3867,7 +4367,7 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
       claimBtn.className = 'btn btn-sm border-0 bg-transparent text-secondary opacity-35 me-2';
       claimBtn.id = `btn-claim-${escrow.index}`;
       claimBtn.innerHTML = '<i class="bi bi-lock me-1"></i> Claim';
-      claimBtn.disabled = true; // Evaluated by refreshEscrowUI
+      claimBtn.disabled = true;
       claimBtn.addEventListener('click', () => executeDirectEscrowAction('escrow_finish', escrow));
       
       const cancelBtn = document.createElement('button');
@@ -3875,7 +4375,7 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
       cancelBtn.className = 'btn btn-sm border-0 bg-transparent text-secondary opacity-35';
       cancelBtn.id = `btn-cancel-${escrow.index}`;
       cancelBtn.innerHTML = '<i class="bi bi-lock me-1"></i> Cancel';
-      cancelBtn.disabled = true; // Evaluated by refreshEscrowUI
+      cancelBtn.disabled = true;
       cancelBtn.addEventListener('click', () => executeDirectEscrowAction('escrow_cancel', escrow));
 
       actionsDiv.appendChild(claimBtn);
@@ -4186,6 +4686,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initViewToggle();
   initSortToggle();
   initWelcomeTour();
+  startLiveCountdownTimer();
   
   const btnRefreshDashboard = document.getElementById('btnRefreshDashboardEscrows');
   if (btnRefreshDashboard) {
@@ -4551,4 +5052,725 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Load history initially on page load
   setTimeout(loadSignatureHistory, 1000);
+});
+
+
+// =============================================================================
+// 🚀 XRPL MEME PORTAL & MULTISIG / CROWD-HODL COORDINATOR
+// =============================================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+  // 1. Initial State
+  let collectedSignatures = [];
+  let preparedTxJson = null;
+  let multisigPollingIntervals = [];
+
+  // DOM Elements
+  const tabMemeBtn = document.getElementById('tab-meme-btn');
+  const memeTokenSelect = document.getElementById('memeTokenSelect');
+  const btnMemeTokenSearch = document.getElementById('btnMemeTokenSearch');
+  const memeTokenIssuer = document.getElementById('memeTokenIssuer');
+  const memeTokenHex = document.getElementById('memeTokenHex');
+  
+  const memeLockAmount = document.getElementById('memeLockAmount');
+  const memeLockType = document.getElementById('memeLockType');
+  const memeLockRecipient = document.getElementById('memeLockRecipient');
+  const memeSelfLockCheck = document.getElementById('memeSelfLockCheck');
+  
+  const memeTimeLockRow = document.getElementById('memeTimeLockRow');
+  const memeLockReleaseTime = document.getElementById('memeLockReleaseTime');
+  const memeHodlBadge = document.getElementById('memeHodlBadge');
+  const memeHodlLevel = document.getElementById('memeHodlLevel');
+  
+  const memeConditionalRow = document.getElementById('memeConditionalRow');
+  const memeLockCondition = document.getElementById('memeLockCondition');
+  const memeLockFulfillment = document.getElementById('memeLockFulfillment');
+  
+  const memeMultisigSigners = document.getElementById('memeMultisigSigners');
+  const memeMultisigQuorum = document.getElementById('memeMultisigQuorum');
+  const btnMemeLockupSubmit = document.getElementById('btnMemeLockupSubmit');
+  
+  const memeMultisigCard = document.getElementById('memeMultisigCard');
+  const memeMultisigProgressBar = document.getElementById('memeMultisigProgressBar');
+  const memeMultisigSignersList = document.getElementById('memeMultisigSignersList');
+  const btnSubmitMultisigTx = document.getElementById('btnSubmitMultisigTx');
+  const btnCancelMultisig = document.getElementById('btnCancelMultisig');
+
+  const crowdhdlVaultAddress = document.getElementById('crowdhdlVaultAddress');
+  const btnScanCrowdhdl = document.getElementById('btnScanCrowdhdl');
+  const crowdhdlTokenSelect = document.getElementById('crowdhdlTokenSelect');
+  const crowdhdlDepositAmount = document.getElementById('crowdhdlDepositAmount');
+  const btnCrowdhdlDeposit = document.getElementById('btnCrowdhdlDeposit');
+  
+  const crowdhdlAdminPanel = document.getElementById('crowdhdlAdminPanel');
+  const crowdhdlAdminSigners = document.getElementById('crowdhdlAdminSigners');
+  const crowdhdlReleaseTime = document.getElementById('crowdhdlReleaseTime');
+  const btnCrowdhdlPrepareRefund = document.getElementById('btnCrowdhdlPrepareRefund');
+  const crowdhdlTotalLocked = document.getElementById('crowdhdlTotalLocked');
+  const crowdhdlDepositorsCount = document.getElementById('crowdhdlDepositorsCount');
+  const crowdhdlLeaderboardBody = document.getElementById('crowdhdlLeaderboardBody');
+
+  // Verify all DOM elements exist to prevent errors
+  if (!memeTokenSelect || !btnMemeLockupSubmit) return;
+
+  // 2. Setup Token Search Interception
+  memeTokenSelect.addEventListener('change', () => {
+    const val = memeTokenSelect.value;
+    if (val === 'custom') {
+      btnMemeTokenSearch.style.display = 'inline-block';
+      // Setup window active target interceptor
+      window.activeTokenTarget = {
+        curInput: {
+          value: '',
+          set value(v) {
+            memeTokenHex.value = formatCurrencyCode(v);
+            let opt = memeTokenSelect.querySelector('option[value="' + v + '"]');
+            if (!opt) {
+              opt = document.createElement('option');
+              opt.value = v;
+              opt.textContent = `${v} (Custom)`;
+              memeTokenSelect.insertBefore(opt, memeTokenSelect.lastElementChild);
+            }
+            memeTokenSelect.value = v;
+          },
+          dispatchEvent(e) {}
+        },
+        issInput: {
+          value: '',
+          set value(v) {
+            memeTokenIssuer.value = v;
+            const opt = memeTokenSelect.querySelector('option[value="' + memeTokenSelect.value + '"]');
+            if (opt) opt.setAttribute('data-issuer', v);
+          },
+          dispatchEvent(e) {}
+        }
+      };
+      // Trigger search modal
+      btnMemeTokenSearch.click();
+    } else {
+      btnMemeTokenSearch.style.display = 'none';
+      const opt = memeTokenSelect.querySelector(`option[value="${val}"]`);
+      if (opt) {
+        memeTokenIssuer.value = opt.getAttribute('data-issuer') || '';
+        memeTokenHex.value = opt.getAttribute('data-hex') || '';
+      }
+    }
+  });
+
+  if (btnMemeTokenSearch) {
+    btnMemeTokenSearch.addEventListener('click', () => {
+      const modalEl = document.getElementById('tokenSearchModal');
+      if (modalEl) {
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+        setTimeout(() => document.getElementById('tokenSearchInput').focus(), 500);
+      }
+    });
+  }
+
+  // 3. Lockup Form View Toggles
+  memeLockType.addEventListener('change', () => {
+    if (memeLockType.value === 'time') {
+      memeTimeLockRow.classList.remove('d-none');
+      memeConditionalRow.classList.add('d-none');
+    } else {
+      memeTimeLockRow.classList.add('d-none');
+      memeConditionalRow.classList.remove('d-none');
+    }
+  });
+
+  memeSelfLockCheck.addEventListener('change', () => {
+    if (memeSelfLockCheck.checked) {
+      memeLockRecipient.value = window.connectedAccount || '';
+      memeLockRecipient.setAttribute('readonly', 'true');
+    } else {
+      memeLockRecipient.value = '';
+      memeLockRecipient.removeAttribute('readonly');
+    }
+  });
+
+  // Automatically update recipient when connected account changes
+  window.addEventListener('storage', () => {
+    if (memeSelfLockCheck.checked) {
+      memeLockRecipient.value = window.connectedAccount || '';
+    }
+  });
+  
+  // Custom polling hook for active account
+  const intervalId = setInterval(() => {
+    if (memeSelfLockCheck && memeSelfLockCheck.checked && memeLockRecipient.value !== window.connectedAccount) {
+      memeLockRecipient.value = window.connectedAccount || '';
+    }
+  }, 1000);
+
+  // 4. Time Lock Duration Presets & HODL Strength Calculations
+  const updateHodlStrength = () => {
+    const timeVal = memeLockReleaseTime.value;
+    if (!timeVal) {
+      memeHodlBadge.classList.add('d-none');
+      return;
+    }
+    const releaseTime = new Date(timeVal).getTime();
+    const now = Date.now();
+    const diffMs = releaseTime - now;
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+    memeHodlBadge.classList.remove('d-none');
+    memeHodlBadge.className = 'mt-2 fw-semibold small ';
+
+    if (diffDays < 0) {
+      memeHodlBadge.classList.add('d-none');
+    } else if (diffDays < 2) {
+      memeHodlBadge.classList.add('text-secondary');
+      memeHodlLevel.innerHTML = '<i class="bi bi-trash"></i> Paper Hands 🧻';
+    } else if (diffDays < 15) {
+      memeHodlBadge.classList.add('text-warning');
+      memeHodlLevel.innerHTML = '<i class="bi bi-award"></i> Bronze HODLer 🥉';
+    } else if (diffDays < 60) {
+      memeHodlBadge.classList.add('text-info');
+      memeHodlLevel.innerHTML = '<i class="bi bi-award-fill"></i> Silver HODLer 🥈';
+    } else if (diffDays < 180) {
+      memeHodlBadge.classList.add('text-warning');
+      memeHodlLevel.innerHTML = '<i class="bi bi-patch-check-fill text-warning"></i> Gold HODLer 🥇';
+    } else {
+      memeHodlBadge.classList.add('text-danger', 'animate-pulse');
+      memeHodlLevel.innerHTML = '<i class="bi bi-gem text-danger"></i> DIAMOND HANDS 💎';
+    }
+  };
+
+  document.querySelectorAll('.meme-dur-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const days = parseInt(btn.getAttribute('data-days'));
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() + days);
+      
+      // format to local ISO without seconds (YYYY-MM-DDTHH:MM)
+      const tzOffset = targetDate.getTimezoneOffset() * 60000; // offset in milliseconds
+      const localISOTime = (new Date(targetDate - tzOffset)).toISOString().slice(0, 16);
+      
+      memeLockReleaseTime.value = localISOTime;
+      updateHodlStrength();
+    });
+  });
+
+  memeLockReleaseTime.addEventListener('input', updateHodlStrength);
+  memeLockReleaseTime.addEventListener('change', updateHodlStrength);
+
+  // Deploy Signer List to Active Wallet
+  const btnMemeConfigureSigners = document.getElementById('btnMemeConfigureSigners');
+  if (btnMemeConfigureSigners) {
+    btnMemeConfigureSigners.addEventListener('click', async () => {
+      if (!window.connectedAccount) {
+        showAlert('Please connect your wallet first to set up its signer list.', 'warning');
+        return;
+      }
+
+      const signerAddressesStr = memeMultisigSigners.value.trim();
+      const quorum = parseInt(memeMultisigQuorum.value) || 2;
+      
+      const signers = signerAddressesStr.split(',').map(s => s.trim()).filter(s => s.length > 0);
+      if (signers.length === 0) {
+        showAlert('Please provide comma-separated signer addresses for multisig.', 'warning');
+        return;
+      }
+
+      btnMemeConfigureSigners.setAttribute('disabled', 'true');
+      btnMemeConfigureSigners.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Preparing payload...';
+
+      try {
+        // Map signers into SignerEntries
+        const signerEntries = signers.map(signer => ({
+          SignerEntry: {
+            Account: signer,
+            SignerWeight: 1
+          }
+        }));
+
+        // Construct SignerListSet transaction
+        const txjson = {
+          TransactionType: 'SignerListSet',
+          Account: window.connectedAccount,
+          SignerQuorum: quorum,
+          SignerEntries: signerEntries
+        };
+
+        const resp = await fetch('/xumm/payload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ txjson })
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+        const payload = await resp.json();
+
+        // Show payload modal for signing
+        showSubmittedModal(payload);
+
+      } catch (err) {
+        showAlert(`Failed to configure signers: ${err.message}`, 'error');
+      } finally {
+        btnMemeConfigureSigners.removeAttribute('disabled');
+        btnMemeConfigureSigners.innerHTML = '<i class="bi bi-person-plus-fill"></i> Deploy Signer List to Active Wallet';
+      }
+    });
+  }
+
+  // 5. Submit Individual or Multisig Lockup
+  btnMemeLockupSubmit.addEventListener('click', async () => {
+    const amount = parseFloat(memeLockAmount.value);
+    const recipient = memeLockRecipient.value.trim();
+    const lockType = memeLockType.value;
+    const tokenSymbol = memeTokenSelect.value;
+    const issuer = memeTokenIssuer.value.trim();
+    const currency = memeTokenHex.value.trim();
+
+    if (!amount || amount <= 0) {
+      showAlert('Please enter a valid amount greater than 0.', 'warning');
+      return;
+    }
+    if (!recipient) {
+      showAlert('Recipient address is required.', 'warning');
+      return;
+    }
+    if (lockType === 'time' && !memeLockReleaseTime.value) {
+      showAlert('Please select a release time lock.', 'warning');
+      return;
+    }
+    if (lockType === 'conditional' && !memeLockCondition.value) {
+      showAlert('Please enter the condition hash.', 'warning');
+      return;
+    }
+
+    // Determine if multisig is configured
+    const signerAddressesStr = memeMultisigSigners.value.trim();
+    const isMultisig = signerAddressesStr.length > 0;
+    const quorum = parseInt(memeMultisigQuorum.value) || 2;
+
+    if (isMultisig) {
+      // Setup Multisig Coordinator
+      const signers = signerAddressesStr.split(',').map(s => s.trim()).filter(s => s.length > 0);
+      if (signers.length === 0) {
+        showAlert('Please provide valid signer addresses for multisig.', 'warning');
+        return;
+      }
+      
+      // We must fetch the sequence of the sender (the multisig account)
+      const sender = window.connectedAccount || signers[0]; // fallback
+      let seq = 0;
+      try {
+        const infoResp = await fetch(`/account_info/${encodeURIComponent(sender)}`);
+        if (!infoResp.ok) throw new Error(await infoResp.text());
+        const info = await infoResp.json();
+        seq = info.Sequence;
+      } catch (err) {
+        showAlert(`Failed to fetch Multisig Account sequence: ${err.message}. Ensure the account is funded on the selected network.`, 'error');
+        return;
+      }
+
+      // Calculate fee: base fee (12 drops) * (1 + signers count)
+      const totalFeeDrops = (12 * (1 + signers.length)).toString();
+
+      // Build prepared transaction JSON
+      preparedTxJson = {
+        TransactionType: 'Payment',
+        Account: sender,
+        Destination: recipient,
+        Amount: {
+          currency: currency,
+          issuer: issuer,
+          value: amount.toString()
+        },
+        Fee: totalFeeDrops,
+        Sequence: seq,
+        SigningPubKey: ''
+      };
+
+      // Launch multisig signing UI
+      memeMultisigCard.classList.remove('d-none');
+      collectedSignatures = [];
+      updateMultisigProgress(signers, quorum);
+
+      // Create Xaman payloads for each signer
+      multisigPollingIntervals.forEach(clearInterval);
+      multisigPollingIntervals = [];
+
+      for (let i = 0; i < signers.length; i++) {
+        const signer = signers[i];
+        try {
+          const payloadData = {
+            txjson: preparedTxJson,
+            options: {
+              submit: false,
+              multisign: true
+            }
+          };
+          const pResp = await fetch('/xumm/payload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payloadData)
+          });
+          if (!pResp.ok) throw new Error(await pResp.text());
+          const payload = await pResp.json();
+          const uuid = payload.uuid;
+
+          const signerItem = document.getElementById(`multisig-signer-${signer}`);
+          if (signerItem) {
+            const linkCol = signerItem.querySelector('.signer-link-col');
+            linkCol.innerHTML = `
+              <a href="${payload.next.always}" target="_blank" class="btn btn-xs btn-primary"><i class="bi bi-qr-code-scan"></i> Sign Payload</a>
+              <div class="mt-1 small text-muted font-monospace" style="font-size: 0.62rem;">UUID: ${uuid.slice(0,8)}...</div>
+            `;
+          }
+
+          // Start polling for this signer's payload status
+          const checkStatus = async () => {
+            try {
+              const sResp = await fetch(`/xumm/payload_status/${uuid}`);
+              if (!sResp.ok) return;
+              const statusData = await sResp.json();
+              if (statusData.status === 'signed' || (statusData.response && statusData.response.response && statusData.response.response.tx_signature)) {
+                clearInterval(pollId);
+                
+                const responseObj = statusData.response?.response || {};
+                const sig = responseObj.tx_signature || statusData.response?.tx_signature;
+                const pubkey = responseObj.signer || statusData.response?.signer;
+
+                if (sig && pubkey) {
+                  addCollectedSignature(signer, sig, pubkey, signers, quorum);
+                }
+              }
+            } catch (err) {
+              console.error(err);
+            }
+          };
+
+          const pollId = setInterval(checkStatus, 3000);
+          multisigPollingIntervals.push(pollId);
+
+        } catch (err) {
+          showAlert(`Failed to create signing payload for ${signer}: ${err.message}`, 'error');
+        }
+      }
+
+    } else {
+      // Individual Time Lock / Conditional Escrow
+      if (lockType === 'time') {
+        showAlert('Routing Meme Token Time-Lock to L2 Auto-Release Vault...', 'info');
+        
+        // Fill Vault inputs
+        document.getElementById('vaultDestination').value = recipient;
+        document.getElementById('vaultCurrency').value = tokenSymbol === 'custom' ? decodeCurrencyCode(currency) : tokenSymbol;
+        document.getElementById('vaultIssuer').value = issuer;
+        document.getElementById('vaultReleaseTime').value = memeLockReleaseTime.value;
+
+        // Switch to Vault Pane
+        const vaultTabBtn = document.getElementById('tab-vault-btn');
+        if (vaultTabBtn) vaultTabBtn.click();
+      } else {
+        // Individual Conditional IOU Lockup: not natively supported on XRPL
+        showAlert('Conditional escrow of non-XRP assets is not natively supported by the XRPL. Please use a Time-Lock with L2 Vault, or configure a custom multi-sig pool.', 'warning');
+      }
+    }
+  });
+
+  const updateMultisigProgress = (signers, quorum) => {
+    memeMultisigSignersList.innerHTML = '';
+    signers.forEach(s => {
+      const div = document.createElement('div');
+      div.className = 'list-group-item d-flex justify-content-between align-items-center py-2';
+      div.id = `multisig-signer-${s}`;
+      div.innerHTML = `
+        <div class="text-truncate" style="max-width: 60%;">
+          <strong class="text-secondary small font-monospace">${s}</strong>
+          <div class="status-indicator small text-muted"><i class="bi bi-clock-history"></i> Waiting for signature...</div>
+        </div>
+        <div class="signer-link-col text-end">
+          <span class="spinner-border spinner-border-sm text-primary" role="status"></span> Preparing payload...
+        </div>
+      `;
+      memeMultisigSignersList.appendChild(div);
+    });
+
+    const percent = Math.min(100, Math.round((collectedSignatures.length / quorum) * 100));
+    memeMultisigProgressBar.style.width = `${percent}%`;
+    memeMultisigProgressBar.textContent = `${collectedSignatures.length} / ${quorum} Signatures`;
+  };
+
+  const addCollectedSignature = (account, signature, pubkey, signers, quorum) => {
+    // Check if already collected
+    const existing = collectedSignatures.find(s => s.Signer.Account === account);
+    if (existing) return;
+
+    collectedSignatures.push({
+      Signer: {
+        Account: account,
+        TxnSignature: signature,
+        SigningPubKey: pubkey
+      }
+    });
+
+    const item = document.getElementById(`multisig-signer-${account}`);
+    if (item) {
+      item.querySelector('.status-indicator').innerHTML = '<span class="text-success fw-bold"><i class="bi bi-check-circle-fill"></i> Signed successfully</span>';
+      item.querySelector('.signer-link-col').innerHTML = '<span class="badge bg-success"><i class="bi bi-patch-check"></i> OK</span>';
+    }
+
+    const percent = Math.min(100, Math.round((collectedSignatures.length / quorum) * 100));
+    memeMultisigProgressBar.style.width = `${percent}%`;
+    memeMultisigProgressBar.textContent = `${collectedSignatures.length} / ${quorum} Signatures`;
+
+    if (collectedSignatures.length >= quorum) {
+      memeMultisigProgressBar.className = 'progress-bar bg-success text-white fw-bold';
+      btnSubmitMultisigTx.removeAttribute('disabled');
+      showAlert('Multisig Quorum achieved! You can now submit the transaction to the ledger.', 'success');
+    }
+  };
+
+  btnSubmitMultisigTx.addEventListener('click', async () => {
+    if (!preparedTxJson || collectedSignatures.length === 0) return;
+
+    // Append signers array to prepared transaction (sorted alphabetically by Account)
+    const sortedSigners = [...collectedSignatures].sort((a, b) => {
+      return a.Signer.Account.localeCompare(b.Signer.Account);
+    });
+
+    const finalTx = {
+      ...preparedTxJson,
+      Signers: sortedSigners
+    };
+
+    btnSubmitMultisigTx.setAttribute('disabled', 'true');
+    btnSubmitMultisigTx.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Submitting...';
+
+    try {
+      const resp = await fetch('/submit_json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tx_json: finalTx })
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      const res = await resp.json();
+      
+      const result = res.result || {};
+      if (result.engine_result === 'tesSUCCESS' || result.engine_result_code === 0) {
+        showAlert('Multisig Transaction Submitted Successfully!', 'success');
+        memeMultisigCard.classList.add('d-none');
+        multisigPollingIntervals.forEach(clearInterval);
+        multisigPollingIntervals = [];
+      } else {
+        showAlert(`Ledger Submission Failed: ${result.engine_result_message || result.engine_result}`, 'danger');
+        btnSubmitMultisigTx.removeAttribute('disabled');
+        btnSubmitMultisigTx.innerHTML = '<i class="bi bi-cloud-upload"></i> Merge & Submit Multi-Signed Transaction';
+      }
+    } catch (err) {
+      showAlert(`API Error submitting transaction: ${err.message}`, 'error');
+      btnSubmitMultisigTx.removeAttribute('disabled');
+      btnSubmitMultisigTx.innerHTML = '<i class="bi bi-cloud-upload"></i> Merge & Submit Multi-Signed Transaction';
+    }
+  });
+
+  btnCancelMultisig.addEventListener('click', (e) => {
+    e.preventDefault();
+    memeMultisigCard.classList.add('d-none');
+    multisigPollingIntervals.forEach(clearInterval);
+    multisigPollingIntervals = [];
+    showAlert('Multisig signature collection aborted.', 'warning');
+  });
+
+  // 6. Crowd-HODL Manager logic
+  btnScanCrowdhdl.addEventListener('click', async () => {
+    const vault = crowdhdlVaultAddress.value.trim();
+    if (!vault) {
+      showAlert('Please enter a Vault / Pool address to scan.', 'warning');
+      return;
+    }
+
+    btnScanCrowdhdl.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Scanning...';
+    btnScanCrowdhdl.setAttribute('disabled', 'true');
+
+    try {
+      const r = await fetch(`/account_tx/${encodeURIComponent(vault)}?limit=400`);
+      if (!r.ok) throw new Error(await r.text());
+      const txHistory = await r.json();
+
+      const transactions = txHistory.transactions || [];
+      const deposits = {}; // account -> totalAmount
+
+      transactions.forEach(item => {
+        const tx = item.tx || item.transaction || {};
+        const meta = item.meta || item.metaData || {};
+        if (tx.TransactionType === 'Payment' && tx.Destination === vault && meta.TransactionResult === 'tesSUCCESS') {
+          // Check if it is the correct IOU token (CHILLGUY)
+          const amt = tx.Amount;
+          if (amt && typeof amt === 'object' && amt.currency === '4348494c4c475559000000000000000000000000' && amt.issuer === 'rMxouZkuiKo7BYd3nnzhW4g5tZpJwVnGry') {
+            const sender = tx.Account;
+            const value = parseFloat(amt.value) || 0;
+            if (value > 0) {
+              deposits[sender] = (deposits[sender] || 0) + value;
+            }
+          }
+        }
+      });
+
+      // Sort deposits by amount descending
+      const sorted = Object.entries(deposits).map(([addr, val]) => ({ addr, val })).sort((a, b) => b.val - a.val);
+
+      crowdhdlLeaderboardBody.innerHTML = '';
+      if (sorted.length === 0) {
+        crowdhdlLeaderboardBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-4">No deposits found for $CHILLGUY on this account.</td></tr>';
+        crowdhdlTotalLocked.textContent = '0 CHILLGUY';
+        crowdhdlDepositorsCount.textContent = '0 Depositors';
+      } else {
+        let total = 0;
+        sorted.forEach((d, idx) => {
+          total += d.val;
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><strong>#${idx + 1}</strong></td>
+            <td class="font-monospace">${shortenAddress(d.addr)}</td>
+            <td class="fw-bold text-success">${d.val.toLocaleString()} CHILLGUY</td>
+          `;
+          crowdhdlLeaderboardBody.appendChild(tr);
+        });
+        crowdhdlTotalLocked.textContent = `${total.toLocaleString()} CHILLGUY`;
+        crowdhdlDepositorsCount.textContent = `${sorted.length} Depositors`;
+
+        // Check if current connected user is one of the admins / or show the release panel
+        crowdhdlAdminPanel.classList.remove('d-none');
+      }
+
+    } catch (err) {
+      showAlert(`Scan failed: ${err.message}`, 'error');
+    } finally {
+      btnScanCrowdhdl.innerHTML = '<i class="bi bi-search"></i> Scan';
+      btnScanCrowdhdl.removeAttribute('disabled');
+    }
+  });
+
+  btnCrowdhdlDeposit.addEventListener('click', async () => {
+    const vault = crowdhdlVaultAddress.value.trim();
+    const amount = parseFloat(crowdhdlDepositAmount.value);
+    
+    if (!vault) {
+      showAlert('Vault address is required.', 'warning');
+      return;
+    }
+    if (!amount || amount <= 0) {
+      showAlert('Please enter an amount to deposit.', 'warning');
+      return;
+    }
+
+    btnCrowdhdlDeposit.setAttribute('disabled', 'true');
+    btnCrowdhdlDeposit.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Loading Xaman...';
+
+    try {
+      // Construct Xaman payload for Payment deposit
+      const payloadData = {
+        txjson: {
+          TransactionType: 'Payment',
+          Account: window.connectedAccount || '',
+          Destination: vault,
+          Amount: {
+            currency: '4348494c4c475559000000000000000000000000',
+            issuer: 'rMxouZkuiKo7BYd3nnzhW4g5tZpJwVnGry',
+            value: amount.toString()
+          }
+        }
+      };
+
+      const resp = await fetch('/xumm/payload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadData)
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      const payload = await resp.json();
+
+      // Show submit modal
+      showSubmittedModal(payload);
+
+    } catch (err) {
+      showAlert(`Failed to initiate deposit: ${err.message}`, 'error');
+    } finally {
+      btnCrowdhdlDeposit.removeAttribute('disabled');
+      btnCrowdhdlDeposit.textContent = 'Deposit';
+    }
+  });
+
+  btnCrowdhdlPrepareRefund.addEventListener('click', async () => {
+    const vault = crowdhdlVaultAddress.value.trim();
+    const adminSignersStr = crowdhdlAdminSigners.value.trim();
+    const timeVal = crowdhdlReleaseTime.value;
+
+    if (!vault) {
+      showAlert('Vault address is required.', 'warning');
+      return;
+    }
+    if (!adminSignersStr) {
+      showAlert('Please provide comma-separated admin signer addresses.', 'warning');
+      return;
+    }
+    if (!timeVal) {
+      showAlert('Please select the release date and time lock.', 'warning');
+      return;
+    }
+
+    const releaseUnix = Math.floor(new Date(timeVal).getTime() / 1000);
+    const nowUnix = Math.floor(Date.now() / 1000);
+    if (releaseUnix > nowUnix) {
+      showAlert('The release time lock date has not passed yet. Refund batch can only be triggered after the time lock expires.', 'warning');
+      return;
+    }
+
+    // Prepare list of depositors to refund
+    try {
+      const r = await fetch(`/account_tx/${encodeURIComponent(vault)}?limit=400`);
+      if (!r.ok) throw new Error(await r.text());
+      const txHistory = await r.json();
+
+      const transactions = txHistory.transactions || [];
+      const deposits = {};
+
+      transactions.forEach(item => {
+        const tx = item.tx || item.transaction || {};
+        const meta = item.meta || item.metaData || {};
+        if (tx.TransactionType === 'Payment' && tx.Destination === vault && meta.TransactionResult === 'tesSUCCESS') {
+          const amt = tx.Amount;
+          if (amt && typeof amt === 'object' && amt.currency === '4348494c4c475559000000000000000000000000' && amt.issuer === 'rMxouZkuiKo7BYd3nnzhW4g5tZpJwVnGry') {
+            const sender = tx.Account;
+            const value = parseFloat(amt.value) || 0;
+            if (value > 0) {
+              deposits[sender] = (deposits[sender] || 0) + value;
+            }
+          }
+        }
+      });
+
+      // Convert deposits into batch Payment transactions
+      window.batchTransactions = [];
+      Object.entries(deposits).forEach(([addr, val]) => {
+        window.batchTransactions.push({
+          TransactionType: 'Payment',
+          Account: vault,
+          Destination: addr,
+          Amount: {
+            currency: '4348494c4c475559000000000000000000000000',
+            issuer: 'rMxouZkuiKo7BYd3nnzhW4g5tZpJwVnGry',
+            value: val.toString()
+          }
+        });
+      });
+
+      updateBatchUI();
+      showAlert(`Prepared refund batch for ${Object.keys(deposits).length} depositors. Switch to the Auto-Sweep Vault / Batch tab to review and execute!`, 'success');
+
+    } catch (err) {
+      showAlert(`Failed to compile refund transactions: ${err.message}`, 'error');
+    }
+  });
+
+  // Shorten XRPL addresses helper
+  function shortenAddress(addr) {
+    if (!addr) return '';
+    return addr.slice(0, 6) + '...' + addr.slice(-6);
+  }
 });

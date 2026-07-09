@@ -204,6 +204,11 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    
+    # Enforce Strict-Transport-Security (HSTS) if running on HTTPS
+    if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+        
     return response
 
 
@@ -805,6 +810,38 @@ def get_active_escrows(request: Request, account: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/account_tx/{account}")
+def get_account_tx(request: Request, account: str, limit: Optional[int] = 400):
+    """Fetch recent transaction history for a given account from the XRPL."""
+    account = account.strip()
+    if not is_valid_xrpl_address(account):
+        raise HTTPException(status_code=400, detail="Invalid account address format. Must be a valid XRPL r-address with a correct checksum.")
+    
+    rpc_req = {
+        "method": "account_tx",
+        "params": [
+            {
+                "account": account,
+                "ledger_index_min": -1,
+                "ledger_index_max": -1,
+                "limit": limit
+            }
+        ]
+    }
+    try:
+        r = session.post(XRPL_RPC, json=rpc_req, timeout=15)
+        if r.status_code == 200:
+            res = r.json().get("result", {})
+            if "error" in res:
+                raise HTTPException(status_code=400, detail=res.get("error_message", res.get("error")))
+            return res
+        else:
+            raise HTTPException(status_code=r.status_code, detail="XRPL node account_tx request failed.")
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/ledger_time")
 def get_ledger_time(request: Request):
     """Fetch the latest validated ledger's close_time (XRPL Epoch time)."""
@@ -1067,6 +1104,8 @@ def create_xumm_payload(request: Request, payload: XummPayloadRequest):
         data["user_token"] = user_token
     if custom_meta:
         data["custom_meta"] = custom_meta
+    if payload_dict.get("options"):
+        data["options"] = payload_dict.get("options")
         
     if XUMM_WEBHOOK_URL:
         # XUMM accepts additional fields; include webhook URL to request callbacks to this server.

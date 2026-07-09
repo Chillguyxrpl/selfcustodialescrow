@@ -607,6 +607,9 @@
           <button class="nav-link" id="tab-vault-btn" data-bs-toggle="pill" data-bs-target="#pane-vault" type="button" role="tab" aria-controls="pane-vault" aria-selected="false">
             <i class="bi bi-safe2"></i> Auto-Sweep Vault
           </button>
+          <button class="nav-link" id="tab-meme-btn" data-bs-toggle="pill" data-bs-target="#pane-meme" type="button" role="tab" aria-controls="pane-meme" aria-selected="false">
+            <i class="bi bi-rocket-takeoff text-warning"></i> Meme Lockup
+          </button>
         </div>
 
         <!-- Bottom theme toggle and info button -->
@@ -729,8 +732,12 @@
                         <i class="bi bi-list-task text-secondary"></i>
                       </button>
                     </div>
+                    <span id="dashboardSyncTime" class="text-muted small me-2 d-none d-sm-inline" style="font-size: 0.72rem; letter-spacing: 0.2px;"></span>
                     <button class="btn btn-sm btn-outline-primary px-3" id="btnRefreshDashboardEscrows">
                       <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                    <button class="btn btn-sm btn-outline-success px-3 d-none" id="btnExportEscrowsCSV" title="Export Escrows to CSV">
+                      <i class="bi bi-file-earmark-spreadsheet"></i> Export CSV
                     </button>
                   </div>
                 </div>
@@ -755,6 +762,26 @@
                 <select id="templateSelect" class="form-select d-none">
                   <option value="">Select an escrow...</option>
                 </select>
+
+                <!-- Search, Filter, and Category Grid Header -->
+                <div class="row g-2 mb-3 align-items-center">
+                  <div class="col-md-5">
+                    <div class="input-group">
+                      <span class="input-group-text bg-body-secondary"><i class="bi bi-search"></i></span>
+                      <input type="text" id="templateSearchInput" class="form-control" placeholder="Search templates (e.g. escrow, payment)...">
+                    </div>
+                  </div>
+                  <div class="col-md-7 d-flex justify-content-md-end align-items-center gap-2 flex-wrap" id="templateCategories">
+                    <button class="btn btn-xs btn-primary active-category-btn" data-category="all">All</button>
+                    <button class="btn btn-xs btn-outline-secondary" data-category="escrow">Escrows</button>
+                    <button class="btn btn-xs btn-outline-secondary" data-category="payment">Payments</button>
+                    <button class="btn btn-xs btn-outline-secondary" data-category="setup">Account Setup</button>
+                    <button class="btn btn-xs btn-outline-info ms-md-2" type="button" data-bs-toggle="modal" data-bs-target="#templateComparisonModal" title="Compare Templates">
+                      <i class="bi bi-layout-split"></i> Compare
+                    </button>
+                  </div>
+                </div>
+
                 <div id="templateGrid" class="list-group list-group-flush border rounded shadow-sm overflow-hidden mb-3"></div>
                 <small class="text-muted d-block mb-3" id="templateDesc"></small>
                 
@@ -969,7 +996,290 @@
               </div>
             </div>
           </div>
-          
+
+          <!-- Pane 7: Meme Lockup -->
+          <div class="tab-pane fade" id="pane-meme" role="tabpanel" aria-labelledby="tab-meme-btn">
+            
+            <!-- Tab switches inside Meme Pane -->
+            <ul class="nav nav-pills mb-4 gap-2 bg-body-secondary p-1 rounded" id="memeSubTab" role="tablist" style="max-width: fit-content;">
+              <li class="nav-item" role="presentation">
+                <button class="nav-link active btn-sm" id="meme-builder-tab" data-bs-toggle="pill" data-bs-target="#subpane-meme-builder" type="button" role="tab" aria-controls="subpane-meme-builder" aria-selected="true">
+                  <i class="bi bi-shield-lock-fill me-1"></i> Individual Lockup
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link btn-sm" id="meme-crowdhdl-tab" data-bs-toggle="pill" data-bs-target="#subpane-meme-crowdhdl" type="button" role="tab" aria-controls="subpane-meme-crowdhdl" aria-selected="false">
+                  <i class="bi bi-people-fill me-1"></i> Crowd-HODL Pool
+                </button>
+              </li>
+            </ul>
+
+            <div class="tab-content" id="memeSubTabContent">
+              <!-- Sub-pane 1: Meme Escrow Builder -->
+              <div class="tab-pane fade show active" id="subpane-meme-builder" role="tabpanel" aria-labelledby="meme-builder-tab">
+                <div class="card border border-warning-subtle shadow-sm">
+                  <div class="card-header bg-warning-subtle d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 fw-bold text-warning-emphasis">
+                      <i class="bi bi-rocket-takeoff text-warning me-2 animate-bounce"></i> XRPL Meme Lockup Builder
+                    </h5>
+                    <span class="badge bg-warning text-dark fw-bold">🚀 Diamond Hands Lock</span>
+                  </div>
+                  <div class="card-body">
+                    <div class="alert alert-warning mb-3" style="font-size: 0.85rem;">
+                      <strong><i class="bi bi-exclamation-triangle-fill"></i> HODL Safety Notice:</strong> Locking up meme tokens is an active commitment. Make sure you select a duration that matches your holding capacity. Since the XRP Ledger does not support native Escrows for IOUs, these locks will be routed via the L2 Auto-Release Vault.
+                    </div>
+                    
+                    <form id="memeEscrowForm">
+                      <div class="row">
+                        <!-- Asset Token Selector -->
+                        <div class="col-md-6 mb-3">
+                          <label class="form-label fw-bold">Select Meme Token</label>
+                          <div class="input-group">
+                            <select id="memeTokenSelect" class="form-select">
+                              <option value="CHILLGUY" data-issuer="rMxouZkuiKo7BYd3nnzhW4g5tZpJwVnGry" data-hex="4348494c4c475559000000000000000000000000">Chill Guy ($CHILLGUY)</option>
+                              <option value="custom">-- Custom Token Search --</option>
+                            </select>
+                            <button class="btn btn-outline-secondary" type="button" id="btnMemeTokenSearch" style="display: none;">
+                              <i class="bi bi-search"></i>
+                            </button>
+                          </div>
+                        </div>
+
+                        <!-- Amount Field -->
+                        <div class="col-md-6 mb-3">
+                          <label class="form-label fw-bold">Lockup Amount</label>
+                          <input type="number" step="any" id="memeLockAmount" class="form-control" placeholder="0.0">
+                        </div>
+
+                        <!-- Hidden fields for selected token details -->
+                        <input type="hidden" id="memeTokenIssuer" value="rMxouZkuiKo7BYd3nnzhW4g5tZpJwVnGry">
+                        <input type="hidden" id="memeTokenHex" value="4348494c4c475559000000000000000000000000">
+
+                        <!-- Lock Type Selector -->
+                        <div class="col-md-6 mb-3">
+                          <label class="form-label fw-bold">Lockup Type</label>
+                          <select id="memeLockType" class="form-select">
+                            <option value="time">Time Lock (Auto-Release)</option>
+                            <option value="conditional">Conditional (Needs Release Key)</option>
+                          </select>
+                        </div>
+
+                        <!-- Recipient Selector -->
+                        <div class="col-md-6 mb-3">
+                          <label class="form-label fw-bold">Recipient Address</label>
+                          <div class="input-group">
+                            <input type="text" id="memeLockRecipient" class="form-control" placeholder="r...">
+                            <div class="input-group-text bg-light">
+                              <input class="form-check-input mt-0 me-1" type="checkbox" id="memeSelfLockCheck" checked>
+                              <label class="form-check-label small" for="memeSelfLockCheck">Self-Lock</label>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Time Lock Fields (Visible if Type = time) -->
+                        <div id="memeTimeLockRow" class="col-12 mb-3">
+                          <label class="form-label fw-bold">HODL Duration</label>
+                          <div class="d-flex flex-wrap gap-2 mb-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm meme-dur-preset" data-days="1">1 Day (Paper 🧻)</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm meme-dur-preset" data-days="7">1 Week (Bronze 🥉)</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm meme-dur-preset" data-days="30">1 Month (Silver 🥈)</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm meme-dur-preset" data-days="90">3 Months (Gold 🥇)</button>
+                            <button type="button" class="btn btn-outline-warning btn-sm meme-dur-preset" data-days="365">1 Year (Diamond 💎)</button>
+                          </div>
+                          <input type="datetime-local" id="memeLockReleaseTime" class="form-control">
+                          <div class="mt-2 text-warning fw-semibold small d-none" id="memeHodlBadge">
+                            <i class="bi bi-shield-fill-check"></i> HODL Strength: <span id="memeHodlLevel">Paper Hands</span>
+                          </div>
+                        </div>
+
+                        <!-- Conditional Lock Fields (Visible if Type = conditional) -->
+                        <div id="memeConditionalRow" class="col-12 mb-3 d-none">
+                          <label class="form-label fw-bold">Release Condition & Preimage</label>
+                          <div class="alert alert-info py-2" style="font-size: 0.8rem;">
+                            <i class="bi bi-info-circle-fill"></i> To execute a conditional lockup, generate a secret key (preimage) and lock hash. Use the <strong>Crypto Generator</strong> tab to pre-calculate, then paste them below.
+                          </div>
+                          <div class="mb-2">
+                            <label class="form-label small fw-bold">Condition (Hex)</label>
+                            <input type="text" id="memeLockCondition" class="form-control form-control-sm" placeholder="Paste condition hash...">
+                          </div>
+                          <div>
+                            <label class="form-label small fw-bold">Fulfillment Key (Preimage Hex)</label>
+                            <input type="text" id="memeLockFulfillment" class="form-control form-control-sm" placeholder="Keep secret - recipient needs this to claim...">
+                          </div>
+                        </div>
+
+                        <!-- Multisig Configuration -->
+                        <div class="col-12 mb-3">
+                          <div class="accordion" id="memeMultisigAccordion">
+                            <div class="accordion-item border border-secondary-subtle">
+                              <h2 class="accordion-header">
+                                <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#memeMultisigCollapse" aria-expanded="false" aria-controls="memeMultisigCollapse">
+                                  <i class="bi bi-people-fill text-primary me-2"></i> Multisig Settings (Optional)
+                                </button>
+                              </h2>
+                              <div id="memeMultisigCollapse" class="accordion-collapse collapse" data-bs-parent="#memeMultisigAccordion">
+                                <div class="accordion-body bg-light-subtle">
+                                  <div class="row">
+                                    <div class="col-md-8 mb-3">
+                                      <label class="form-label small fw-bold">Multisig Signers (Comma-separated r-addresses)</label>
+                                      <input type="text" id="memeMultisigSigners" class="form-control form-control-sm" placeholder="rSigner1, rSigner2, ...">
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                      <label class="form-label small fw-bold">Quorum Threshold</label>
+                                      <input type="number" id="memeMultisigQuorum" class="form-control form-control-sm" value="2" min="1">
+                                    </div>
+                                  </div>
+                                  <div class="alert alert-info py-2 mb-3" style="font-size: 0.78rem;">
+                                    <i class="bi bi-shield-lock"></i> Adding signers sets up the transaction for multi-signing. Signatures will be collected and merged in the browser before final ledger submission.
+                                  </div>
+                                  <div class="d-grid gap-2">
+                                    <button type="button" id="btnMemeConfigureSigners" class="btn btn-outline-primary btn-sm fw-semibold">
+                                      <i class="bi bi-person-plus-fill"></i> Deploy Signer List to Active Wallet
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                      </div>
+
+                      <div class="d-grid mt-2">
+                        <button type="button" id="btnMemeLockupSubmit" class="btn btn-warning py-2 fw-bold text-dark">
+                          <i class="bi bi-lock-fill"></i> Lock Meme Tokens
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+
+                <!-- Multisig Progress Coordinator (Visible when active) -->
+                <div class="card border mt-4 d-none animate-fade-in" id="memeMultisigCard">
+                  <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <span class="fw-bold"><i class="bi bi-cpu-fill text-warning"></i> Multisig Signature Coordinator</span>
+                    <button class="btn btn-sm btn-outline-danger" id="btnCancelMultisig">Abort</button>
+                  </div>
+                  <div class="card-body">
+                    <div id="memeMultisigProgress" class="mb-3">
+                      <div class="progress" style="height: 1.5rem;">
+                        <div id="memeMultisigProgressBar" class="progress-bar bg-warning progress-bar-striped progress-bar-animated text-dark fw-bold" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0/2 Signatures</div>
+                      </div>
+                    </div>
+                    <div class="list-group mb-3" id="memeMultisigSignersList">
+                      <!-- Signer items populated dynamically -->
+                    </div>
+                    <div class="d-grid gap-2">
+                      <button id="btnSubmitMultisigTx" class="btn btn-success fw-bold" disabled>
+                        <i class="bi bi-cloud-upload"></i> Merge & Submit Multi-Signed Transaction
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Sub-pane 2: Crowd-HODL Manager -->
+              <div class="tab-pane fade" id="subpane-meme-crowdhdl" role="tabpanel" aria-labelledby="meme-crowdhdl-tab">
+                <div class="row">
+                  <!-- Control Panel -->
+                  <div class="col-md-6 mb-4">
+                    <div class="card border shadow-sm h-100">
+                      <div class="card-header bg-body-secondary">
+                        <h5 class="mb-0 fw-bold text-dark-emphasis"><i class="bi bi-tools text-primary me-2"></i> Crowd-HODL Setup & Deposit</h5>
+                      </div>
+                      <div class="card-body">
+                        <div class="mb-3">
+                          <label class="form-label fw-bold">Pool / Vault Address (Multisig Account)</label>
+                          <div class="input-group">
+                            <input type="text" id="crowdhdlVaultAddress" class="form-control" placeholder="r...">
+                            <button class="btn btn-primary" type="button" id="btnScanCrowdhdl">
+                              <i class="bi bi-search"></i> Scan
+                            </button>
+                          </div>
+                        </div>
+
+                        <div class="mb-3">
+                          <label class="form-label fw-bold">Meme Token</label>
+                          <select id="crowdhdlTokenSelect" class="form-select">
+                            <option value="CHILLGUY" data-issuer="rMxouZkuiKo7BYd3nnzhW4g5tZpJwVnGry" data-hex="4348494c4c475559000000000000000000000000">Chill Guy ($CHILLGUY)</option>
+                          </select>
+                        </div>
+
+                        <!-- Depositor Section (Connected Community) -->
+                        <div class="border p-3 rounded bg-light mb-3">
+                          <h6 class="fw-bold mb-2"><i class="bi bi-box-arrow-in-down text-success"></i> Lock Tokens in Crowd-HODL</h6>
+                          <div class="row g-2">
+                            <div class="col-8">
+                              <input type="number" id="crowdhdlDepositAmount" class="form-control" placeholder="Amount to deposit...">
+                            </div>
+                            <div class="col-4">
+                              <button type="button" id="btnCrowdhdlDeposit" class="btn btn-success w-100 fw-bold">
+                                Deposit
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Project Admin Release Panel -->
+                        <div class="border border-danger p-3 rounded bg-danger-subtle d-none" id="crowdhdlAdminPanel">
+                          <h6 class="fw-bold text-danger-emphasis mb-2"><i class="bi bi-unlock-fill"></i> Admin Lock Release (Multisig Admins)</h6>
+                          <div class="mb-3">
+                            <label class="form-label small fw-bold">Admins Signer List (Comma-separated r-addresses)</label>
+                            <input type="text" id="crowdhdlAdminSigners" class="form-control form-control-sm" placeholder="rSigner1, rSigner2, ...">
+                          </div>
+                          <div class="mb-3">
+                            <label class="form-label small fw-bold">Release Date & Time</label>
+                            <input type="datetime-local" id="crowdhdlReleaseTime" class="form-control form-control-sm">
+                          </div>
+                          <div class="d-grid">
+                            <button type="button" id="btnCrowdhdlPrepareRefund" class="btn btn-danger btn-sm fw-bold">
+                              Initiate Multisig Release Refund Batch
+                            </button>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Leaderboard / Stats Panel -->
+                  <div class="col-md-6 mb-4">
+                    <div class="card border shadow-sm h-100">
+                      <div class="card-header bg-body-secondary d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fw-bold text-dark-emphasis"><i class="bi bi-trophy text-warning me-2"></i> Lockup Leaderboard</h5>
+                        <span class="badge bg-primary rounded-pill" id="crowdhdlDepositorsCount">0 Depositors</span>
+                      </div>
+                      <div class="card-body p-0">
+                        <div class="p-3 bg-light border-bottom d-flex justify-content-between">
+                          <span class="fw-bold">Total Vault Locked:</span>
+                          <span class="fw-bold text-primary" id="crowdhdlTotalLocked">0 CHILLGUY</span>
+                        </div>
+                        <div class="table-responsive" style="max-height: 380px;">
+                          <table class="table table-hover table-striped mb-0 text-nowrap" id="crowdhdlTable">
+                            <thead>
+                              <tr>
+                                <th>Rank</th>
+                                <th>Depositor Address</th>
+                                <th>Locked Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody id="crowdhdlLeaderboardBody">
+                              <tr>
+                                <td colspan="3" class="text-center text-muted py-4">
+                                  <i class="bi bi-info-circle fs-4 mb-2"></i><br>Enter a Vault Address and Scan to view deposits.
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
         </div>
       </main>
     </div>
@@ -1004,157 +1314,78 @@
 
     
 
-    <!-- Token Search Modal -->
-    <div class="modal fade" id="tokenSearchModal" tabindex="-1" aria-labelledby="tokenSearchModalLabel" aria-hidden="true">
+
+
+
+    <!-- Template Comparison Modal -->
+    <div class="modal fade" id="templateComparisonModal" tabindex="-1" aria-labelledby="templateComparisonModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="tokenSearchModalLabel"><i class="bi bi-search"></i> Lookup Token (xrplmeta.org)</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title fw-bold" id="templateComparisonModalLabel"><i class="bi bi-layout-split me-2"></i> Transaction Template Comparison</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
-          <div class="modal-body">
-            <div class="input-group mb-3">
-              <input type="text" id="tokenSearchInput" class="form-control" placeholder="Search by currency code (e.g. USD, xSPECTAR) or name...">
-              <button class="btn btn-primary" type="button" id="tokenSearchActionBtn">Search</button>
-            </div>
-            <div id="tokenSearchResults" class="list-group shadow-sm">
-               <div class="text-center text-muted small p-3">Enter a token name or currency code above to search public directories.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Transaction Submitted Modal -->
-    <div class="modal fade" id="txSubmittedModal" tabindex="-1" aria-labelledby="txSubmittedModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header bg-success text-white">
-            <h5 class="modal-title" id="txSubmittedModalLabel"><i class="bi bi-send-check"></i> Transaction Created</h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" onclick="stopPayloadPolling()"></button>
-          </div>
-          <div class="modal-body" id="txSubmittedModalBody">
-            <!-- Dynamic content will be injected here -->
-          </div>
-          <div class="modal-footer bg-light border-0">
-            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" onclick="stopPayloadPolling()">Close</button>
-                <div>
-                  <label class="form-label small fw-bold">Derived Fulfillment (Hex)</label>
-                  <div class="input-group">
-                    <input type="text" id="derivedFulfillment" class="form-control form-control-sm bg-body-secondary" readonly placeholder="Calculated fulfillment will appear here...">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard(document.getElementById('derivedFulfillment').value, 'Fulfillment copied!')">
-                      <i class="bi bi-copy"></i>
-                    </button>
-                  </div>
-                  <div class="form-text small text-muted">Keep this secret. Give it to the recipient to use as the <strong>Fulfillment</strong> when claiming the escrow.</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Pane 5: Signature Audit -->
-          <div class="tab-pane fade" id="pane-history" role="tabpanel" aria-labelledby="tab-history-btn">
-            <div class="card border" id="signatureHistorySection">
-              <div class="card-header bg-body-secondary">
-                <h5 class="mb-0 fw-bold text-dark-emphasis" style="font-size: 1rem;">
-                  <i class="bi bi-clock-history text-primary me-2"></i> Signature History (Audit Log)
-                </h5>
-              </div>
-              <div class="card-body">
-                <div class="d-flex justify-content-between mb-3 align-items-center">
-                  <span class="small text-muted">Last 50 signatures generated on this server</span>
-                  <button class="btn btn-sm btn-outline-secondary px-3 py-1" id="btnRefreshHistory" type="button">
-                    <i class="bi bi-arrow-clockwise"></i> Refresh
-                  </button>
-                </div>
-                <div id="signatureHistoryContainer" style="max-height: 500px; overflow-y: auto;">
-                  <div class="text-center text-muted small p-3">No history records loaded. Please click refresh or connect your wallet.</div>
-                </div>
-              </div>
+          <div class="modal-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover table-striped mb-0 align-middle text-nowrap" style="font-size: 0.85rem;">
+                <thead class="table-dark">
+                  <tr>
+                    <th>Type</th>
+                    <th>Category</th>
+                    <th>Fulfillment Key?</th>
+                    <th>Time Lock?</th>
+                    <th>Ideal Use Case</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Timed Escrow</strong></td>
+                    <td><span class="badge bg-primary-subtle text-primary border border-primary-subtle">Escrow</span></td>
+                    <td>❌ No</td>
+                    <td>✅ Required (Release Date)</td>
+                    <td>Vesting, trust funds, or deferred payments.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Conditional Escrow</strong></td>
+                    <td><span class="badge bg-primary-subtle text-primary border border-primary-subtle">Escrow</span></td>
+                    <td>✅ Yes (Preimage hex)</td>
+                    <td>⚠️ Optional but recommended (Expiry)</td>
+                    <td>Trade settlements, delivery guarantees, OTC deals.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Oracle Price Threshold</strong></td>
+                    <td><span class="badge bg-primary-subtle text-primary border border-primary-subtle">Escrow</span></td>
+                    <td>✅ Yes (Automatic)</td>
+                    <td>✅ Required (Expiry)</td>
+                    <td>Price-hedging, programmatic liquidation, target trades.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Token Payment</strong></td>
+                    <td><span class="badge bg-success-subtle text-success border border-success-subtle">Payment</span></td>
+                    <td>❌ No</td>
+                    <td>❌ No</td>
+                    <td>Direct transfer of XRP, IOUs, or MPTs.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Trustline (TrustSet)</strong></td>
+                    <td><span class="badge bg-success-subtle text-success border border-success-subtle">Payment</span></td>
+                    <td>❌ No</td>
+                    <td>❌ No</td>
+                    <td>Opting in to accept and hold an issued token.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Issue Token</strong></td>
+                    <td><span class="badge bg-success-subtle text-success border border-success-subtle">Payment</span></td>
+                    <td>❌ No</td>
+                    <td>❌ No</td>
+                    <td>Distributing custom assets from an issuing wallet.</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
-
-          <!-- Pane 6: Auto-Sweep Vault -->
-          <div class="tab-pane fade" id="pane-vault" role="tabpanel" aria-labelledby="tab-vault-btn">
-            <div class="card border" id="l2VaultSection">
-              <div class="card-header bg-body-secondary">
-                <h5 class="mb-0 fw-bold text-dark-emphasis" style="font-size: 1rem;">
-                  <i class="bi bi-clock-history text-primary me-2"></i> L2 Token Auto-Release Vault (Browser Node)
-                </h5>
-              </div>
-              <div class="card-body">
-                <div class="alert alert-danger mb-3">
-                  <strong><i class="bi bi-shield-exclamation"></i> Security Warning:</strong> Pasting your private seed into any web browser exposes it to malicious extensions or Cross-Site Scripting (XSS). <strong>Use a burner wallet only!</strong> This circumvents the core safety of the Xaman app. While your seed is processed entirely locally and never leaves your device, you assume all risks. <strong>Keep this tab open</strong> until the release time is reached for the auto-sweep transaction to execute!
-                </div>
-                <div class="row">
-                  <div class="col-md-6 mb-3">
-                    <label class="form-label"><strong>Vault Seed</strong></label>
-                    <input type="password" id="vaultSeed" class="form-control" placeholder="sEd...">
-                  </div>
-                  <div class="col-md-6 mb-3">
-                    <label class="form-label"><strong>Destination Address</strong></label>
-                    <input type="text" id="vaultDestination" class="form-control" placeholder="r...">
-                  </div>
-                  <div class="col-md-4 mb-3">
-                    <label class="form-label"><strong>Token Currency Code</strong></label>
-                    <input type="text" id="vaultCurrency" class="form-control" placeholder="e.g. USD">
-                  </div>
-                  <div class="col-md-8 mb-3">
-                    <label class="form-label"><strong>Token Issuer Address</strong></label>
-                    <input type="text" id="vaultIssuer" class="form-control" placeholder="r...">
-                  </div>
-                  <div class="col-md-6 mb-3">
-                    <label class="form-label"><strong>Release Date & Time</strong></label>
-                    <input type="datetime-local" id="vaultReleaseTime" class="form-control">
-                  </div>
-                  <div class="col-md-6 mb-3">
-                    <label class="form-label"><strong>Network RPC (WebSocket)</strong></label>
-                    <select id="vaultRpc" class="form-select">
-                      <option value="wss://s1.ripple.com">Mainnet (wss://s1.ripple.com)</option>
-                      <option value="wss://s.altnet.rippletest.net:51233">Testnet (wss://s.altnet.rippletest.net)</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="d-grid gap-2 d-md-flex mt-2">
-                  <button id="startVaultBtn" class="btn btn-primary">
-                    <i class="bi bi-play-circle"></i> Start Vault Monitor
-                  </button>
-                  <button id="stopVaultBtn" class="btn btn-danger" style="display: none;">
-                    <i class="bi bi-stop-circle"></i> Stop Monitor
-                  </button>
-                </div>
-                <div id="vaultLog" class="result-panel mt-3" style="display: none; height: 250px;"></div>
-              </div>
-            </div>
-          </div>
-          
-        </div>
-      </main>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz" crossorigin="anonymous"></script>
-
-    <!-- Escrow info modal -->
-    <div class="modal fade" id="escrowInfoModal" tabindex="-1" aria-labelledby="escrowInfoModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="escrowInfoModalLabel">Escrow Type Help</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <ul class="list-group list-group-flush">
-              <li class="list-group-item"><strong>Timed Escrow Create</strong> - create an escrow that releases funds automatically after a specific future date.</li>
-              <li class="list-group-item"><strong>Conditional Escrow Create</strong> - create an escrow that only releases funds when a required condition is fulfilled.</li>
-              <li class="list-group-item"><strong>Oracle Price Threshold</strong> - create a price-based escrow using a token pair and target price to derive the release condition.</li>
-              <li class="list-group-item"><strong>Escrow Finish</strong> - finish or release an existing escrow by providing the owner, sequence, and fulfillment details.</li>
-              <li class="list-group-item"><strong>Token Payment</strong> - send issued tokens or amounts to a destination account.</li>
-              <li class="list-group-item"><strong>Trustline</strong> - establish a trust line for an issued token from a specific issuer.</li>
-              <li class="list-group-item"><strong>Issue Token</strong> - issue a token payment from the issuer account to a recipient.</li>
-            </ul>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <div class="modal-footer bg-light">
+            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
           </div>
         </div>
       </div>

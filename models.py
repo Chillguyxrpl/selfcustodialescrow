@@ -436,6 +436,10 @@ class XummPayloadRequest(BaseModel):
         default=None,
         description="Custom metadata for Xaman"
     )
+    options: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional payload creation parameters (e.g. multisign, submit)"
+    )
     # Also accept direct transaction fields
     TransactionType: Optional[str] = Field(
         default=None,
