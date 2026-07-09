@@ -1221,31 +1221,41 @@
                         </div>
 
                         <!-- Project Admin Release Panel -->
-                        <div class="border border-danger p-3 rounded bg-danger-subtle" id="crowdhdlAdminPanel">
-                          <h6 class="fw-bold text-danger-emphasis mb-2"><i class="bi bi-shield-lock-fill"></i> Vault Multisig Setup & Release</h6>
-                          <div class="row mb-3">
-                             <div class="col-md-8">
-                               <label class="form-label small fw-bold">Admins Signer List (Comma-separated r-addresses)</label>
-                               <input type="text" id="crowdhdlAdminSigners" class="form-control form-control-sm" placeholder="rSigner1, rSigner2, ...">
-                             </div>
-                             <div class="col-md-4">
-                               <label class="form-label small fw-bold">Quorum Threshold</label>
-                               <input type="number" id="crowdhdlAdminQuorum" class="form-control form-control-sm" value="2" min="1">
-                             </div>
-                           </div>
-                           <div class="d-grid mb-3">
-                             <button type="button" id="btnCrowdhdlConfigureSigners" class="btn btn-outline-danger btn-sm fw-semibold">
-                               <i class="bi bi-person-plus-fill"></i> Deploy Signer List to Active Wallet
-                             </button>
-                           </div>
-                          <div class="mb-3">
-                            <label class="form-label small fw-bold">Release Date & Time</label>
-                            <input type="datetime-local" id="crowdhdlReleaseTime" class="form-control form-control-sm">
-                          </div>
-                          <div class="d-grid">
-                            <button type="button" id="btnCrowdhdlPrepareRefund" class="btn btn-danger btn-sm fw-bold">
-                              Initiate Multisig Release Refund Batch
-                            </button>
+                        <div class="accordion mt-3" id="crowdhdlAdminPanel">
+                          <div class="accordion-item border border-danger-subtle">
+                            <h2 class="accordion-header">
+                              <button class="accordion-button collapsed py-2 text-danger-emphasis bg-danger-subtle" type="button" data-bs-toggle="collapse" data-bs-target="#crowdhdlAdminCollapse" aria-expanded="false" aria-controls="crowdhdlAdminCollapse">
+                                <i class="bi bi-people-fill text-danger me-2"></i> Multisig Settings (Optional)
+                              </button>
+                            </h2>
+                            <div id="crowdhdlAdminCollapse" class="accordion-collapse collapse" data-bs-parent="#crowdhdlAdminPanel">
+                              <div class="accordion-body bg-light-subtle">
+                                <div class="row mb-3">
+                                  <div class="col-md-8">
+                                    <label class="form-label small fw-bold">Admins Signer List (Comma-separated r-addresses)</label>
+                                    <input type="text" id="crowdhdlAdminSigners" class="form-control form-control-sm" placeholder="rSigner1, rSigner2, ...">
+                                  </div>
+                                  <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Quorum Threshold</label>
+                                    <input type="number" id="crowdhdlAdminQuorum" class="form-control form-control-sm" value="2" min="1">
+                                  </div>
+                                </div>
+                                <div class="d-grid mb-3">
+                                  <button type="button" id="btnCrowdhdlConfigureSigners" class="btn btn-outline-danger btn-sm fw-semibold">
+                                    <i class="bi bi-person-plus-fill"></i> Deploy Signer List to Active Wallet
+                                  </button>
+                                </div>
+                                <div class="mb-3">
+                                  <label class="form-label small fw-bold">Release Date & Time Lock</label>
+                                  <input type="datetime-local" id="crowdhdlReleaseTime" class="form-control form-control-sm">
+                                </div>
+                                <div class="d-grid">
+                                  <button type="button" id="btnCrowdhdlPrepareRefund" class="btn btn-danger btn-sm fw-bold">
+                                    Initiate Multisig Release Refund Batch
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </div>
 
