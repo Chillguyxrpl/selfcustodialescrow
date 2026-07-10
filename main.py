@@ -872,19 +872,49 @@ def get_sys_info():
 @app.get("/search_tokens")
 def search_tokens(request: Request, currency: Optional[str] = None, name: Optional[str] = None):
     """Proxy token search requests to a public token registry to avoid CORS issues."""
-    params = {}
-    if currency:
-        params["currency"] = currency
-    if name:
-        params["name"] = name
-        
-    if not params:
+    query_val = name or currency
+    if not query_val:
         return {"tokens": []}
         
+    params = {
+        "name_like": query_val,
+        "limit": 50
+    }
+        
     try:
-        r = session.get("https://api.xrplmeta.org/tokens", params=params, timeout=10)
+        # Use active v2 API and specify s1.xrplmeta.org to match its valid SSL certificate
+        r = session.get("https://s1.xrplmeta.org/v2/tokens", params=params, timeout=10)
         if r.status_code == 200:
-            return r.json()
+            data = r.json()
+            raw_tokens = data.get("tokens", [])
+            
+            # Map v2 response schema to what the frontend expects
+            transformed = []
+            for t in raw_tokens:
+                meta = t.get("meta", {}) or {}
+                token_meta = meta.get("token", {}) or {}
+                issuer_meta = meta.get("issuer", {}) or {}
+                
+                name_val = token_meta.get("name") or issuer_meta.get("name") or ""
+                domain_val = issuer_meta.get("domain") or ""
+                
+                new_meta = {
+                    "name": name_val,
+                    "domain": domain_val,
+                    "token": token_meta,
+                    "issuer": issuer_meta
+                }
+                
+                transformed.append({
+                    "currency": t.get("currency"),
+                    "issuer": t.get("issuer"),
+                    "token_type": t.get("token_type"),
+                    "meta": new_meta,
+                    "metrics": t.get("metrics"),
+                    "name": name_val,
+                    "domain": domain_val
+                })
+            return {"tokens": transformed, "count": len(transformed)}
         return {"tokens": []}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Token search failed: {str(e)}")
