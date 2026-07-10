@@ -619,6 +619,36 @@ def get_payload_history(request: Request, account: str = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def query_xrpl_node(rpc_req: dict) -> dict:
+    """Queries the primary XRPL_RPC. Falls back to the alternative network if the account is not found or request fails."""
+    # Determine fallback RPC URL based on primary XRPL_RPC config
+    is_default_testnet = "testnet" in XRPL_RPC.lower() or "altnet" in XRPL_RPC.lower()
+    alt_rpc = "https://s1.ripple.com:51234/" if is_default_testnet else "https://s.altnet.rippletest.net:51234/"
+    
+    # Try primary RPC node first
+    try:
+        r = session.post(XRPL_RPC, json=rpc_req, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            result = data.get("result", {})
+            if "error" not in result or result.get("error") != "actNotFound":
+                return result
+    except Exception:
+        pass
+
+    # Try fallback RPC node
+    try:
+        r_alt = session.post(alt_rpc, json=rpc_req, timeout=10)
+        if r_alt.status_code == 200:
+            data_alt = r_alt.json()
+            return data_alt.get("result", {})
+    except Exception:
+        pass
+
+    # Return actNotFound as default if it failed on both
+    return {"error": "actNotFound", "error_message": "Account not found on either network node."}
+
+
 @app.get("/check_trustline/{destination}/{issuer}/{currency}")
 def check_trustline(request: Request, destination: str, issuer: str, currency: str):
     """Check if a destination account has an active trustline for a specific token."""
@@ -632,57 +662,32 @@ def check_trustline(request: Request, destination: str, issuer: str, currency: s
         raise HTTPException(status_code=400, detail="Invalid issuer address format. Must be a valid XRPL r-address with a correct checksum.")
 
     marker = None
-    max_retries = 3
-    retry_count = 0
     
-    while retry_count < max_retries:
-        try:
-            # Query all trustlines without peer filter to ensure we find the line
-            rpc_req = {
-                "method": "account_lines",
-                "params": [{"account": destination, "ledger_index": "validated", "limit": 400}]
-            }
-            if marker:
-                rpc_req["params"][0]["marker"] = marker
-                
-            r = session.post(XRPL_RPC, json=rpc_req, timeout=10)
-            if r.status_code == 200:
-                data = r.json()
-                if "error" in data.get("result", {}):
-                    err = data["result"].get("error_message", data["result"].get("error"))
-                    if data["result"].get("error") == "actNotFound":
-                        err = f"Account '{destination}' not found on Mainnet. It may not be funded yet. Fund it with at least 20 XRP first, then set up trustlines."
-                    return {"has_trustline": False, "error": err}
-                
-                lines = data["result"].get("lines", [])
-                for line in lines:
-                    # Match both currency and issuer (counterparty)
-                    if currencies_match(line.get("currency", ""), currency) and line.get("account", "") == issuer:
-                        return {"has_trustline": True, "balance": line.get("balance")}
-                
-                marker = data["result"].get("marker")
-                if not marker:
-                    return {"has_trustline": False, "balance": "0"}
-                
-                retry_count = 0  # Reset on successful request
-            else:
-                retry_count += 1
-                if retry_count < max_retries:
-                    time.sleep(0.5 * retry_count)
-                else:
-                    raise HTTPException(status_code=r.status_code, detail=f"XRPL node request failed after {max_retries} retries.")
-        except requests.exceptions.Timeout:
-            retry_count += 1
-            if retry_count < max_retries:
-                time.sleep(0.5 * retry_count)
-            else:
-                raise HTTPException(status_code=503, detail=f"XRPL RPC timeout after {max_retries} retries. The node may be temporarily unavailable.")
-        except requests.exceptions.RequestException as e:
-            retry_count += 1
-            if retry_count < max_retries:
-                time.sleep(0.5 * retry_count)
-            else:
-                raise HTTPException(status_code=500, detail=f"XRPL connection error: {str(e)}")
+    while True:
+        # Query all trustlines without peer filter to ensure we find the line
+        rpc_req = {
+            "method": "account_lines",
+            "params": [{"account": destination, "ledger_index": "validated", "limit": 400}]
+        }
+        if marker:
+            rpc_req["params"][0]["marker"] = marker
+            
+        res = query_xrpl_node(rpc_req)
+        if "error" in res:
+            err = res.get("error_message", res.get("error"))
+            if res.get("error") == "actNotFound":
+                err = f"Account '{destination}' not found on either network node. Fund it with at least 20 XRP first, then set up trustlines."
+            return {"has_trustline": False, "error": err}
+        
+        lines = res.get("lines", [])
+        for line in lines:
+            # Match both currency and issuer (counterparty)
+            if currencies_match(line.get("currency", ""), currency) and line.get("account", "") == issuer:
+                return {"has_trustline": True, "balance": line.get("balance")}
+        
+        marker = res.get("marker")
+        if not marker:
+            return {"has_trustline": False, "balance": "0"}
 
 
 @app.get("/account_trustlines/{account}")
@@ -698,21 +703,7 @@ def get_account_trustlines(account: str):
     }
     
     try:
-        r = session.post(XRPL_RPC, json=rpc_req, timeout=10)
-        data = r.json() if r.status_code == 200 else {}
-        result = data.get("result", {})
-        
-        # Testnet fallback if the account is not found on the default (Mainnet) network
-        if r.status_code != 200 or result.get("error") == "actNotFound":
-            try:
-                r_test = session.post("https://s.altnet.rippletest.net:51234/", json=rpc_req, timeout=10)
-                if r_test.status_code == 200:
-                    test_data = r_test.json()
-                    if "error" not in test_data.get("result", {}):
-                        result = test_data["result"]
-            except Exception:
-                pass
-                
+        result = query_xrpl_node(rpc_req)
         if "error" in result:
             err = result.get("error_message", result.get("error"))
             if result.get("error") == "actNotFound":
@@ -805,21 +796,16 @@ def get_active_escrows(request: Request, account: str):
         ]
     }
     try:
-        r_obj = session.post(XRPL_RPC, json=rpc_req_obj, timeout=10)
-        r_tx = session.post(XRPL_RPC, json=rpc_req_tx, timeout=10)
-        
-        if r_obj.status_code != 200 or r_tx.status_code != 200:
-            raise HTTPException(status_code=500, detail="XRPL node request failed.")
-            
-        try:
-            res_obj = r_obj.json().get("result", {})
-            res_tx = r_tx.json().get("result", {})
-        except ValueError:
-            raise HTTPException(status_code=502, detail="Invalid JSON response received from XRPL node.")
+        res_obj = query_xrpl_node(rpc_req_obj)
+        res_tx = query_xrpl_node(rpc_req_tx)
         
         if "error" in res_obj:
+            if res_obj.get("error") == "actNotFound":
+                return {"incoming": [], "outgoing": [], "summary": "Account not found on ledger."}
             raise HTTPException(status_code=400, detail=res_obj.get("error_message"))
         if "error" in res_tx:
+            if res_tx.get("error") == "actNotFound":
+                return {"incoming": [], "outgoing": [], "summary": "Account not found on ledger."}
             raise HTTPException(status_code=400, detail=res_tx.get("error_message"))
             
         escrows = res_obj.get("account_objects", [])
