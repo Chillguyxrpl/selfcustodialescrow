@@ -408,7 +408,7 @@ def apply_tx_rules(tx: dict):
 
                     if issuer not in issuer_cache:
                         rpc_req = {"method": "account_info", "params": [{"account": issuer, "ledger_index": "validated"}]}
-                        r = requests.post(XRPL_RPC, json=rpc_req, timeout=10)
+                        r = session.post(XRPL_RPC, json=rpc_req, timeout=10)
 
                         if r.status_code == 200:
                             info = r.json()
@@ -442,7 +442,7 @@ def apply_tx_rules(tx: dict):
                     
                     if issuance_id not in mpt_cache:
                         rpc_req = {"method": "mptoken_issuance_info", "params": [{"mpt_issuance_id": issuance_id, "ledger_index": "validated"}]}
-                        r = requests.post(XRPL_RPC, json=rpc_req, timeout=10)
+                        r = session.post(XRPL_RPC, json=rpc_req, timeout=10)
 
                         if r.status_code == 200:
                             info = r.json()
@@ -527,7 +527,7 @@ def check_issuer_status(request: Request, account: str):
     
     rpc_req = {"method": "account_info", "params": [{"account": account, "ledger_index": "validated"}]}
     try:
-        r = requests.post(XRPL_RPC, json=rpc_req, timeout=10)
+        r = session.post(XRPL_RPC, json=rpc_req, timeout=10)
         if r.status_code == 200:
             try:
                 info = r.json()
@@ -567,7 +567,7 @@ def get_account_info(request: Request, account: str):
     
     rpc_req = {"method": "account_info", "params": [{"account": account, "ledger_index": "validated"}]}
     try:
-        r = requests.post(XRPL_RPC, json=rpc_req, timeout=10)
+        r = session.post(XRPL_RPC, json=rpc_req, timeout=10)
         if r.status_code == 200:
             res = r.json().get("result", {})
             if "error" in res:
@@ -645,7 +645,7 @@ def check_trustline(request: Request, destination: str, issuer: str, currency: s
             if marker:
                 rpc_req["params"][0]["marker"] = marker
                 
-            r = requests.post(XRPL_RPC, json=rpc_req, timeout=10)
+            r = session.post(XRPL_RPC, json=rpc_req, timeout=10)
             if r.status_code == 200:
                 data = r.json()
                 if "error" in data.get("result", {}):
@@ -714,8 +714,8 @@ def get_active_escrows(request: Request, account: str):
         ]
     }
     try:
-        r_obj = requests.post(XRPL_RPC, json=rpc_req_obj, timeout=10)
-        r_tx = requests.post(XRPL_RPC, json=rpc_req_tx, timeout=10)
+        r_obj = session.post(XRPL_RPC, json=rpc_req_obj, timeout=10)
+        r_tx = session.post(XRPL_RPC, json=rpc_req_tx, timeout=10)
         
         if r_obj.status_code != 200 or r_tx.status_code != 200:
             raise HTTPException(status_code=500, detail="XRPL node request failed.")
@@ -796,7 +796,7 @@ def get_active_escrows(request: Request, account: str):
                     if prev_tx:
                         tx_req = {"method": "tx", "params": [{"transaction": prev_tx}]}
                         try:
-                            tx_res = requests.post(XRPL_RPC, json=tx_req, timeout=5)
+                            tx_res = session.post(XRPL_RPC, json=tx_req, timeout=5)
                             if tx_res.status_code == 200:
                                 tx_data = tx_res.json().get("result", {})
                                 if tx_data.get("TransactionType") == "EscrowCreate":
@@ -847,7 +847,7 @@ def get_ledger_time(request: Request):
     """Fetch the latest validated ledger's close_time (XRPL Epoch time)."""
     rpc_req = {"method": "ledger", "params": [{"ledger_index": "validated"}]}
     try:
-        r = requests.post(XRPL_RPC, json=rpc_req, timeout=10)
+        r = session.post(XRPL_RPC, json=rpc_req, timeout=10)
         if r.status_code == 200:
             result = r.json().get("result", {})
             if "error" in result:
@@ -897,7 +897,7 @@ def estimate_fee(request: Request, tx: AnyXRPLTransaction):
     
     rpc_req = {"method": "fee", "params": [{}]}
     try:
-        r = requests.post(XRPL_RPC, json=rpc_req, timeout=10)
+        r = session.post(XRPL_RPC, json=rpc_req, timeout=10)
         if r.status_code == 200:
             result = r.json().get("result", {})
             drops = result.get("drops", {})
@@ -1182,7 +1182,7 @@ def xumm_webhook(request: Request):
                     if tx_blob:
                         try:
                             rpc_req = {"method": "submit", "params": [{"tx_blob": tx_blob}]}
-                            submit_res = requests.post(XRPL_RPC, json=rpc_req, timeout=15)
+                            submit_res = session.post(XRPL_RPC, json=rpc_req, timeout=15)
                             remote["xrpl_submission"] = submit_res.json()
                         except Exception as e:
                             print(f"Auto-submit failed for {uuid}: {e}")
@@ -1282,7 +1282,7 @@ def verify_webhook(request: Request, uuid: str):
             if tx_blob:
                 try:
                     rpc_req = {"method": "submit", "params": [{"tx_blob": tx_blob}]}
-                    submit_res = requests.post(XRPL_RPC, json=rpc_req, timeout=15)
+                    submit_res = session.post(XRPL_RPC, json=rpc_req, timeout=15)
                     remote["xrpl_submission"] = submit_res.json()
                 except Exception as e:
                     print(f"Auto-submit failed for {uuid}: {e}")
@@ -1311,7 +1311,7 @@ def submit_tx(request: Request, body: SubmitTxRequest):
     if not tx_blob:
         raise HTTPException(status_code=400, detail="tx_blob required")
     rpc_req = {"method": "submit", "params": [{"tx_blob": tx_blob}]}
-    r = requests.post(XRPL_RPC, json=rpc_req, timeout=15)
+    r = session.post(XRPL_RPC, json=rpc_req, timeout=15)
     return JSONResponse(content=r.json())
 
 
@@ -1326,5 +1326,5 @@ def submit_json(request: Request, body: SubmitJsonRequest):
     tx_json_dict = tx_json.model_dump(exclude_unset=True, exclude_none=True) if hasattr(tx_json, 'model_dump') else tx_json.dict(exclude_unset=True, exclude_none=True) if hasattr(tx_json, 'dict') else tx_json
     
     rpc_req = {"method": "submit", "params": [{"tx_json": tx_json_dict}]}
-    r = requests.post(XRPL_RPC, json=rpc_req, timeout=15)
+    r = session.post(XRPL_RPC, json=rpc_req, timeout=15)
     return JSONResponse(content=r.json())

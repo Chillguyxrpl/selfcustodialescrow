@@ -203,12 +203,6 @@ function updateTemplateList() {
       header.appendChild(rightPart);
       rowItem.appendChild(header);
 
-      // Collapsible content area for the fields under this row
-      const contentArea = document.createElement('div');
-      contentArea.className = 'fields-content-area px-3 pb-3';
-      contentArea.style.display = 'none';
-      rowItem.appendChild(contentArea);
-
       // Hover effect on the header
       header.addEventListener('mouseover', () => {
         header.classList.add('bg-body-tertiary');
@@ -218,32 +212,11 @@ function updateTemplateList() {
       });
 
       const handleRowActivation = () => {
-        // If already active, toggle collapse
         const isCurrentlyActive = rowItem.classList.contains('active-template-row');
         
         // Deactivate all rows
         document.querySelectorAll('.template-row').forEach(row => {
           row.classList.remove('active-template-row');
-          const area = row.querySelector('.fields-content-area');
-          if (area) {
-            area.style.display = 'none';
-            // Move shared elements back to templatesSection to prevent destruction
-            const templatesSection = document.getElementById('templatesSection');
-            if (templatesSection) {
-              const durationRow = document.getElementById('escrowDurationRow');
-              const templateFields = document.getElementById('templateFields');
-              const buildPayloadBtn = document.getElementById('buildPayloadWrapper');
-              const payloadResult = document.getElementById('payloadResult');
-              const payloadPollingStatus = document.getElementById('payloadPollingStatus');
-              
-              if (durationRow && area.contains(durationRow)) templatesSection.appendChild(durationRow);
-              if (templateFields && area.contains(templateFields)) templatesSection.appendChild(templateFields);
-              if (buildPayloadBtn && area.contains(buildPayloadBtn)) templatesSection.appendChild(buildPayloadBtn);
-              if (payloadResult && area.contains(payloadResult)) templatesSection.appendChild(payloadResult);
-              if (payloadPollingStatus && area.contains(payloadPollingStatus)) templatesSection.appendChild(payloadPollingStatus);
-            }
-            area.innerHTML = '';
-          }
           const btn = row.querySelector('button');
           if (btn) {
             btn.className = 'btn btn-xs btn-outline-primary py-1 px-3';
@@ -251,17 +224,22 @@ function updateTemplateList() {
           }
         });
 
+        const activeWS = document.getElementById('activeTemplateWorkspace');
+        const emptyState = document.getElementById('activeTemplateEmptyState');
+        const buildPayloadBtn = document.getElementById('buildPayloadWrapper');
+
         if (isCurrentlyActive) {
           // Deselect template
           sel.value = '';
-          const buildPayloadBtn = document.getElementById('buildPayloadWrapper');
+          if (activeWS) activeWS.style.display = 'none';
+          if (emptyState) emptyState.style.display = 'block';
           if (buildPayloadBtn) buildPayloadBtn.style.display = 'none';
+          renderFields();
           return;
         }
 
         // Activate this row
         rowItem.classList.add('active-template-row');
-        contentArea.style.display = 'block';
         actionBtn.className = 'btn btn-xs btn-primary py-1 px-3';
         actionBtn.innerHTML = 'Active <i class="bi bi-chevron-down small"></i>';
 
@@ -275,27 +253,21 @@ function updateTemplateList() {
           localStorage.setItem('lastUsedTemplate_anonymous', name);
         }
         
-        // Move common elements beneath this row's contentArea
-        const durationRow = document.getElementById('escrowDurationRow');
-        const templateFields = document.getElementById('templateFields');
-        const buildPayloadBtn = document.getElementById('buildPayloadWrapper');
-        const payloadResult = document.getElementById('payloadResult');
-        const payloadPollingStatus = document.getElementById('payloadPollingStatus');
+        // Update Workspace Info
+        const activeTitle = document.getElementById('activeTemplateTitle');
+        const activeIcon = document.getElementById('activeTemplateIcon');
+        const activeDesc = document.getElementById('templateDesc');
+        const jsonPreviewContainer = document.getElementById('templateJsonPreviewContainer');
 
-        if (durationRow) contentArea.appendChild(durationRow);
-        if (templateFields) contentArea.appendChild(templateFields);
-        if (buildPayloadBtn) {
-          buildPayloadBtn.style.display = 'block';
-          contentArea.appendChild(buildPayloadBtn);
+        if (activeTitle) activeTitle.textContent = getFriendlyTemplateName(name, templates[name]);
+        if (activeIcon) {
+          activeIcon.className = `bi ${getTemplateIcon(name)} fs-4 text-primary`;
         }
-        if (payloadResult) contentArea.appendChild(payloadResult);
-        if (payloadPollingStatus) contentArea.appendChild(payloadPollingStatus);
+        if (activeDesc) activeDesc.textContent = templates[name]?.description || '';
 
         // Raw JSON Template Preview Box
-        let jsonPreviewEl = contentArea.querySelector('.template-json-preview-container');
-        if (!jsonPreviewEl) {
-          jsonPreviewEl = document.createElement('div');
-          jsonPreviewEl.className = 'template-json-preview-container mt-2 mb-3';
+        if (jsonPreviewContainer) {
+          jsonPreviewContainer.innerHTML = '';
           
           const previewBtn = document.createElement('button');
           previewBtn.type = 'button';
@@ -310,11 +282,8 @@ function updateTemplateList() {
           previewBody.style.overflow = 'auto';
           previewBody.style.display = 'none';
           
-          const updateJsonPreview = () => {
-            const rawTx = templates[name]?.txjson || {};
-            previewBody.textContent = JSON.stringify(rawTx, null, 2);
-          };
-          updateJsonPreview();
+          const rawTx = templates[name]?.txjson || {};
+          previewBody.textContent = JSON.stringify(rawTx, null, 2);
           
           previewBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -324,11 +293,14 @@ function updateTemplateList() {
             previewBtn.classList.toggle('btn-secondary', isHidden);
           });
           
-          jsonPreviewEl.appendChild(previewBtn);
-          jsonPreviewEl.appendChild(previewBody);
+          jsonPreviewContainer.appendChild(previewBtn);
+          jsonPreviewContainer.appendChild(previewBody);
         }
-        contentArea.appendChild(jsonPreviewEl);
- 
+
+        if (emptyState) emptyState.style.display = 'none';
+        if (activeWS) activeWS.style.display = 'block';
+        if (buildPayloadBtn) buildPayloadBtn.style.display = 'block';
+
         // Render the fields inside templateFields
         debounceRenderFields();
       };
