@@ -3405,29 +3405,6 @@ window.showSubmittedModal = function(data, txjson = null) {
   modalBody.appendChild(previewCard);
 
   const uuid = data.uuid;
-  const uuidDiv = document.createElement('div');
-  uuidDiv.className = 'uuid-display d-flex justify-content-between align-items-center mb-3';
-  const uuidContent = document.createElement('div');
-  const strong = document.createElement('strong');
-  strong.textContent = 'UUID:';
-  uuidContent.appendChild(strong);
-  const uuidText = document.createElement('span');
-  uuidText.style.marginLeft = '6px';
-  uuidText.textContent = String(uuid);
-  uuidContent.appendChild(uuidText);
-  uuidDiv.appendChild(uuidContent);
-  
-  const copyUuidBtn = document.createElement('button');
-  copyUuidBtn.type = 'button';
-  copyUuidBtn.className = 'btn btn-sm btn-outline-secondary';
-  copyUuidBtn.title = 'Copy UUID';
-  copyUuidBtn.innerHTML = '<i class="bi bi-copy"></i> Copy';
-  copyUuidBtn.addEventListener('click', () => {
-    copyToClipboard(String(uuid), 'UUID copied!');
-  });
-  uuidDiv.appendChild(copyUuidBtn);
-  
-  modalBody.appendChild(uuidDiv);
 
   if (data.next && data.next.always) {
     window.lastXummNext = data.next.always;
@@ -3458,8 +3435,12 @@ window.showSubmittedModal = function(data, txjson = null) {
     }
     
     const openLink = document.createElement('div');
-    openLink.className = 'mt-3';
-    openLink.innerHTML = `<a href="${data.next.always}" target="_blank" class="btn btn-sm btn-outline-primary">Open Xaman directly (Mobile)</a>`;
+    openLink.style.marginTop = '16px';
+    openLink.innerHTML = `
+      <a href="${data.next.always}" target="_blank" class="btn btn-primary btn-md w-100 fw-bold py-2 shadow-sm" style="background-color: #0d6efd; border-color: #0d6efd;">
+        <i class="bi bi-box-arrow-up-right me-1"></i> Open Xaman directly (Mobile)
+      </a>
+    `;
     pushInfo.appendChild(openLink);
     modalBody.appendChild(pushInfo);
     
@@ -3481,6 +3462,33 @@ window.showSubmittedModal = function(data, txjson = null) {
   } else {
     showAlert(`Push notification failed to deliver. Please scan the QR code to continue.`, 'warning');
   }
+
+  // Center footnote UUID at the very bottom
+  const footnote = document.createElement('div');
+  footnote.className = 'mt-4 pt-2 border-top text-center text-secondary';
+  footnote.style.fontSize = '0.72rem';
+  
+  const shortUuid = String(uuid).slice(0, 8) + '...' + String(uuid).slice(-8);
+  footnote.innerHTML = `
+    <span class="d-inline-flex align-items-center gap-1">
+      Transaction ID: <span class="font-monospace fw-semibold">${shortUuid}</span>
+      <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" id="btnCopyFootnoteUuid" title="Copy Full ID" style="font-size: 0.72rem; line-height: 1;">
+        <i class="bi bi-copy"></i>
+      </button>
+    </span>
+  `;
+  modalBody.appendChild(footnote);
+
+  // Add click listener to footnote copy button
+  setTimeout(() => {
+    const copyBtn = document.getElementById('btnCopyFootnoteUuid');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        copyToClipboard(String(uuid), 'Transaction ID copied!');
+      });
+    }
+  }, 100);
 
   const txModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('txSubmittedModal'));
   txModal.show();
