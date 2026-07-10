@@ -3387,6 +3387,105 @@ function renderHumanReadablePreview(tx) {
   return container;
 }
 
+window.showSubmittedModal = function(data, txjson = null) {
+  const modalBody = document.getElementById('txSubmittedModalBody');
+  if (!modalBody) return;
+
+  modalBody.innerHTML = '';
+  const tx = txjson || data.request?.txjson || (data.payload?.request?.txjson) || {};
+
+  // Display safety warnings if any
+  const safetyWarnings = generateSafetyWarnings(tx);
+  if (safetyWarnings) {
+    modalBody.appendChild(safetyWarnings);
+  }
+
+  // Display human-readable transaction preview card
+  const previewCard = renderHumanReadablePreview(tx);
+  modalBody.appendChild(previewCard);
+
+  const uuid = data.uuid;
+  const uuidDiv = document.createElement('div');
+  uuidDiv.className = 'uuid-display d-flex justify-content-between align-items-center mb-3';
+  const uuidContent = document.createElement('div');
+  const strong = document.createElement('strong');
+  strong.textContent = 'UUID:';
+  uuidContent.appendChild(strong);
+  const uuidText = document.createElement('span');
+  uuidText.style.marginLeft = '6px';
+  uuidText.textContent = String(uuid);
+  uuidContent.appendChild(uuidText);
+  uuidDiv.appendChild(uuidContent);
+  
+  const copyUuidBtn = document.createElement('button');
+  copyUuidBtn.type = 'button';
+  copyUuidBtn.className = 'btn btn-sm btn-outline-secondary';
+  copyUuidBtn.title = 'Copy UUID';
+  copyUuidBtn.innerHTML = '<i class="bi bi-copy"></i> Copy';
+  copyUuidBtn.addEventListener('click', () => {
+    copyToClipboard(String(uuid), 'UUID copied!');
+  });
+  uuidDiv.appendChild(copyUuidBtn);
+  
+  modalBody.appendChild(uuidDiv);
+
+  if (data.next && data.next.always) {
+    window.lastXummNext = data.next.always;
+    
+    const pushInfo = document.createElement('div');
+    pushInfo.className = `alert text-center ${data.pushed ? 'alert-info' : 'alert-warning'}`;
+    if (data.pushed) {
+      pushInfo.innerHTML = `
+        <i class="bi bi-phone-vibrate fs-4 d-block mb-2 text-primary"></i>
+        <strong>Push notification sent!</strong><br>
+        Check your connected device to review and sign.
+        <div class="mt-3 small text-muted border-top border-info pt-2">Didn't receive it? Scan the QR code below.</div>
+      `;
+    } else {
+      pushInfo.innerHTML = `
+        <i class="bi bi-qr-code-scan fs-4 d-block mb-2 text-warning"></i>
+        <strong>Awaiting Signature</strong><br>
+        Scan the QR code below using the Xaman app to continue.
+      `;
+    }
+    
+    if (data.refs && data.refs.qr_png) {
+      const qrImg = document.createElement('img');
+      qrImg.src = data.refs.qr_png;
+      qrImg.className = 'img-fluid rounded mt-2 shadow-sm d-block mx-auto';
+      qrImg.style.maxWidth = '200px';
+      pushInfo.appendChild(qrImg);
+    }
+    
+    const openLink = document.createElement('div');
+    openLink.className = 'mt-3';
+    openLink.innerHTML = `<a href="${data.next.always}" target="_blank" class="btn btn-sm btn-outline-primary">Open Xaman directly (Mobile)</a>`;
+    pushInfo.appendChild(openLink);
+    modalBody.appendChild(pushInfo);
+    
+    const pollingStatus = document.getElementById('payloadPollingStatus');
+    if (pollingStatus) {
+      pollingStatus.innerHTML = '';
+      modalBody.appendChild(pollingStatus);
+    }
+    
+    if (data.refs && data.refs.websocket_status) {
+      startPayloadWebSocket(data.refs.websocket_status, uuid);
+    } else {
+      startPayloadPolling(uuid);
+    }
+  }
+  
+  if (data.pushed) {
+    showAlert('Push notification sent! Check your device.', 'success');
+  } else {
+    showAlert(`Push notification failed to deliver. Please scan the QR code to continue.`, 'warning');
+  }
+
+  const txModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('txSubmittedModal'));
+  txModal.show();
+};
+
 document.getElementById('buildPayload').addEventListener('click', async (e) => {
   if (e) e.preventDefault();
 
@@ -3465,102 +3564,7 @@ document.getElementById('buildPayload').addEventListener('click', async (e) => {
     const resDiv = payloadResultEl || document.getElementById('payloadResult');
     if (resDiv) resDiv.innerHTML = ''; // Clear any old errors from the main screen
 
-    const modalBody = document.getElementById('txSubmittedModalBody');
-    if (modalBody) {
-      modalBody.innerHTML = '';
-
-      // Display safety warnings if any
-      const safetyWarnings = generateSafetyWarnings(txjson);
-      if (safetyWarnings) {
-        modalBody.appendChild(safetyWarnings);
-      }
-
-      // Display human-readable transaction preview card
-      const previewCard = renderHumanReadablePreview(txjson);
-      modalBody.appendChild(previewCard);
-
-      const uuid = data.uuid;
-      const uuidDiv = document.createElement('div');
-      uuidDiv.className = 'uuid-display d-flex justify-content-between align-items-center mb-3';
-      const uuidContent = document.createElement('div');
-      const strong = document.createElement('strong');
-      strong.textContent = 'UUID:';
-      uuidContent.appendChild(strong);
-      const uuidText = document.createElement('span');
-      uuidText.style.marginLeft = '6px';
-      uuidText.textContent = String(uuid);
-      uuidContent.appendChild(uuidText);
-      uuidDiv.appendChild(uuidContent);
-      
-      const copyUuidBtn = document.createElement('button');
-      copyUuidBtn.type = 'button';
-      copyUuidBtn.className = 'btn btn-sm btn-outline-secondary';
-      copyUuidBtn.title = 'Copy UUID';
-      copyUuidBtn.innerHTML = '<i class="bi bi-copy"></i> Copy';
-      copyUuidBtn.addEventListener('click', () => {
-        copyToClipboard(String(uuid), 'UUID copied!');
-      });
-      uuidDiv.appendChild(copyUuidBtn);
-      
-      modalBody.appendChild(uuidDiv);
-
-      if (data.next && data.next.always) {
-        // store the XUMM open URL so other flows (e.g., Xaman QR) can reference it
-        window.lastXummNext = data.next.always;
-        
-        const pushInfo = document.createElement('div');
-        pushInfo.className = `alert text-center ${data.pushed ? 'alert-info' : 'alert-warning'}`;
-        if (data.pushed) {
-          pushInfo.innerHTML = `
-            <i class="bi bi-phone-vibrate fs-4 d-block mb-2 text-primary"></i>
-            <strong>Push notification sent!</strong><br>
-            Check your connected device to review and sign.
-            <div class="mt-3 small text-muted border-top border-info pt-2">Didn't receive it? Scan the QR code below.</div>
-          `;
-        } else {
-          pushInfo.innerHTML = `
-            <i class="bi bi-qr-code-scan fs-4 d-block mb-2 text-warning"></i>
-            <strong>Awaiting Signature</strong><br>
-            Scan the QR code below using the Xaman app to continue.
-          `;
-        }
-        
-        if (data.refs && data.refs.qr_png) {
-          const qrImg = document.createElement('img');
-          qrImg.src = data.refs.qr_png;
-          qrImg.className = 'img-fluid rounded mt-2 shadow-sm d-block mx-auto';
-          qrImg.style.maxWidth = '200px';
-          pushInfo.appendChild(qrImg);
-        }
-        
-        const openLink = document.createElement('div');
-        openLink.className = 'mt-3';
-        openLink.innerHTML = `<a href="${data.next.always}" target="_blank" class="btn btn-sm btn-outline-primary">Open Xaman directly (Mobile)</a>`;
-        pushInfo.appendChild(openLink);
-        modalBody.appendChild(pushInfo);
-        
-        const pollingStatus = document.getElementById('payloadPollingStatus');
-        if (pollingStatus) {
-          pollingStatus.innerHTML = '';
-          modalBody.appendChild(pollingStatus);
-        }
-        
-        if (data.refs && data.refs.websocket_status) {
-          startPayloadWebSocket(data.refs.websocket_status, uuid);
-        } else {
-          startPayloadPolling(uuid);
-        }
-      }
-      
-      if (data.pushed) {
-        showAlert('Push notification sent! Check your device.', 'success');
-      } else {
-        showAlert(`Push notification failed to deliver. Please scan the QR code to continue.`, 'warning');
-      }
-
-      const txModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('txSubmittedModal'));
-      txModal.show();
-    }
+    showSubmittedModal(data, txjson);
   } catch (err) {
     const errorMsg = err.message || String(err).replace(/^Error:\s*/, '');
     const resDiv = payloadResultEl || document.getElementById('payloadResult');
