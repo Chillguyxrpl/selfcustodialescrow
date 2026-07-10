@@ -699,17 +699,27 @@ def get_account_trustlines(account: str):
     
     try:
         r = session.post(XRPL_RPC, json=rpc_req, timeout=10)
-        if r.status_code != 200:
-            return {"trustlines": []}
-            
-        data = r.json()
-        if "error" in data.get("result", {}):
-            err = data["result"].get("error_message", data["result"].get("error"))
-            if data["result"].get("error") == "actNotFound":
+        data = r.json() if r.status_code == 200 else {}
+        result = data.get("result", {})
+        
+        # Testnet fallback if the account is not found on the default (Mainnet) network
+        if r.status_code != 200 or result.get("error") == "actNotFound":
+            try:
+                r_test = session.post("https://s.altnet.rippletest.net:51234/", json=rpc_req, timeout=10)
+                if r_test.status_code == 200:
+                    test_data = r_test.json()
+                    if "error" not in test_data.get("result", {}):
+                        result = test_data["result"]
+            except Exception:
+                pass
+                
+        if "error" in result:
+            err = result.get("error_message", result.get("error"))
+            if result.get("error") == "actNotFound":
                 return {"trustlines": [], "error": "Account not found"}
             raise HTTPException(status_code=400, detail=f"XRPL error: {err}")
             
-        lines = data["result"].get("lines", [])
+        lines = result.get("lines", [])
         
         from concurrent.futures import ThreadPoolExecutor
         

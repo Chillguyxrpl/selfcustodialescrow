@@ -80,38 +80,69 @@ function escapeHtml(unsafe) {
 }
 
 window.userTrustlines = [];
+window.loadingTrustlines = false;
 
 async function fetchUserTrustlines(account) {
   if (!account) {
     window.userTrustlines = [];
+    window.loadingTrustlines = false;
     updateFormTrustlinesDropdowns();
     return;
   }
+  window.loadingTrustlines = true;
+  updateFormTrustlinesDropdowns();
+  
   try {
     const resp = await fetch(`/account_trustlines/${account}`);
     if (resp.ok) {
       const data = await resp.json();
       window.userTrustlines = data.trustlines || [];
-      updateFormTrustlinesDropdowns();
+    } else {
+      window.userTrustlines = [];
     }
   } catch (err) {
     console.error('Error fetching trustlines:', err);
+    window.userTrustlines = [];
+  } finally {
+    window.loadingTrustlines = false;
+    updateFormTrustlinesDropdowns();
   }
 }
 
 function populateTrustlinesDropdown(selectEl, curInput, issInput) {
   if (!selectEl) return;
   selectEl.innerHTML = '';
+  selectEl.disabled = false;
   
-  const trustlines = window.userTrustlines || [];
-  if (trustlines.length === 0) {
-    const parentContainer = selectEl.closest('.trustlines-dropdown-container');
+  const parentContainer = selectEl.closest('.trustlines-dropdown-container');
+  
+  // If no wallet connected, hide the container completely
+  if (!window.connectedAccount) {
     if (parentContainer) parentContainer.style.display = 'none';
     return;
   }
 
-  const parentContainer = selectEl.closest('.trustlines-dropdown-container');
   if (parentContainer) parentContainer.style.display = 'block';
+
+  // If currently loading
+  if (window.loadingTrustlines) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '⏳ Loading trustlines from ledger...';
+    selectEl.appendChild(opt);
+    selectEl.disabled = true;
+    return;
+  }
+
+  const trustlines = window.userTrustlines || [];
+  if (trustlines.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '❌ No active trustlines found for this account';
+    selectEl.appendChild(opt);
+    selectEl.disabled = true;
+    return;
+  }
 
   // Add default option
   const placeholder = document.createElement('option');
