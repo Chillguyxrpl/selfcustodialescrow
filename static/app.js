@@ -5072,10 +5072,20 @@ if (startVaultBtnEl) {
     logVault('Verifying vault account and trustline on-chain...');
     try {
       const accountLinesReq = await vaultClient.request({ command: 'account_lines', account: wallet.address, peer: issuer });
-      const trustline = accountLinesReq.result.lines.find(l => l.currency === currency || l.currency === formattedCurrency);
+      const trustline = accountLinesReq.result.lines.find(l => {
+        if (l.account !== issuer) return false;
+        const ledgerDecoded = decodeCurrencyCode(l.currency).toUpperCase().trim();
+        const targetDecoded = decodeCurrencyCode(currency).toUpperCase().trim();
+        const formattedDecoded = decodeCurrencyCode(formattedCurrency).toUpperCase().trim();
+        return l.currency === currency || 
+               l.currency === formattedCurrency || 
+               ledgerDecoded === targetDecoded || 
+               ledgerDecoded === formattedDecoded;
+      });
 
       if (!trustline) {
-        logVault(`❌ [ERROR] Trustline for ${currency} not found on the vault account.`);
+        const readableCurrency = decodeCurrencyCode(currency);
+        logVault(`❌ [ERROR] Trustline for ${readableCurrency} (${issuer}) not found on the vault account.`);
         stopVault();
         return;
       }
@@ -5105,10 +5115,20 @@ if (startVaultBtnEl) {
           if (vaultMonitorTimer) clearInterval(vaultMonitorTimer);
 
           const accountLinesReq = await vaultClient.request({ command: 'account_lines', account: wallet.address, peer: issuer });
-          const trustline = accountLinesReq.result.lines.find(l => l.currency === currency);
+          const trustline = accountLinesReq.result.lines.find(l => {
+            if (l.account !== issuer) return false;
+            const ledgerDecoded = decodeCurrencyCode(l.currency).toUpperCase().trim();
+            const targetDecoded = decodeCurrencyCode(currency).toUpperCase().trim();
+            const formattedDecoded = decodeCurrencyCode(formattedCurrency).toUpperCase().trim();
+            return l.currency === currency || 
+                   l.currency === formattedCurrency || 
+                   ledgerDecoded === targetDecoded || 
+                   ledgerDecoded === formattedDecoded;
+          });
 
           if (!trustline) {
-            logVault(`❌ Trustline for ${currency} not found on the vault account.`);
+            const readableCurrency = decodeCurrencyCode(currency);
+            logVault(`❌ [ERROR] Trustline for ${readableCurrency} (${issuer}) not found on the vault account.`);
             return stopVault();
           }
 
@@ -5119,14 +5139,25 @@ if (startVaultBtnEl) {
           }
 
           const destLinesReq = await vaultClient.request({ command: 'account_lines', account: dest, peer: issuer });
-          const destTrustline = destLinesReq.result.lines.find(l => l.currency === currency);
+          const destTrustline = destLinesReq.result.lines.find(l => {
+            if (l.account !== issuer) return false;
+            const ledgerDecoded = decodeCurrencyCode(l.currency).toUpperCase().trim();
+            const targetDecoded = decodeCurrencyCode(currency).toUpperCase().trim();
+            const formattedDecoded = decodeCurrencyCode(formattedCurrency).toUpperCase().trim();
+            return l.currency === currency || 
+                   l.currency === formattedCurrency || 
+                   ledgerDecoded === targetDecoded || 
+                   ledgerDecoded === formattedDecoded;
+          });
 
           if (!destTrustline && dest !== issuer) {
-            logVault(`❌ Destination address ${dest} does not have an active trustline for ${currency}.`);
+            const readableCurrency = decodeCurrencyCode(currency);
+            logVault(`❌ [ERROR] Destination address ${dest} does not have an active trustline for ${readableCurrency} (${issuer}).`);
             return stopVault();
           }
 
-          logVault(`💰 Verified balance: ${tokenBalance} ${currency}. Sending payment...`);
+          const readableCurrency = decodeCurrencyCode(currency);
+          logVault(`💰 Verified balance: ${tokenBalance} ${readableCurrency}. Sending payment...`);
           
           const paymentTx = {
             TransactionType: 'Payment',
@@ -5782,7 +5813,16 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Fill Vault inputs
         document.getElementById('vaultDestination').value = recipient;
-        document.getElementById('vaultCurrency').value = tokenSymbol === 'custom' ? decodeCurrencyCode(currency) : tokenSymbol;
+        let displayCurrency = currency;
+        if (tokenSymbol && tokenSymbol.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(tokenSymbol);
+            displayCurrency = parsed.decoded_currency || parsed.currency;
+          } catch(e){}
+        } else {
+          displayCurrency = decodeCurrencyCode(currency);
+        }
+        document.getElementById('vaultCurrency').value = displayCurrency;
         document.getElementById('vaultIssuer').value = issuer;
         document.getElementById('vaultReleaseTime').value = memeLockReleaseTime.value;
 
