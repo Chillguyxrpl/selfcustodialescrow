@@ -5333,6 +5333,7 @@ if (startVaultBtnEl) {
 
           const readableCurrency = decodeCurrencyCode(currency);
           logVault(`[LOG] Sending ${tokenBalance} ${readableCurrency} to ${dest}...`);
+          logVault('[LOG] Signing release payload with vault key...');
           
           const paymentTx = {
             TransactionType: 'Payment',
@@ -5346,11 +5347,13 @@ if (startVaultBtnEl) {
           };
 
           try {
+            logVault('[LOG] Broadcasting transaction to the ledger...');
             const response = await vaultClient.submitAndWait(paymentTx, { wallet });
             const txResult = response.result.meta.TransactionResult;
             
             if (txResult === 'tesSUCCESS') {
-              logVault(`[LOG] ✅ Transaction successful! Hash: ${response.result.hash}`);
+              logVault('[LOG] ✅ Auto-release successful! Tokens returned.');
+              logVault(`[LOG] Hash: ${response.result.hash}`);
               showAlert('Vault Auto-Release Successful!', 'success');
             } else {
               logVault(`[ERROR] Failed to send transaction: Transaction failed with result ${txResult}`);
