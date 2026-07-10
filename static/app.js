@@ -5192,18 +5192,23 @@ if (startVaultBtnEl) {
   startVaultBtnEl.addEventListener('click', async (e) => {
     if (e) e.preventDefault();
     const seed = document.getElementById('vaultSeed').value.trim();
-    const currency = document.getElementById('vaultCurrency').value.trim();
-    const issuer = document.getElementById('vaultIssuer').value.trim();
-    const dest = document.getElementById('vaultDestination').value.trim();
-    const releaseTimeVal = document.getElementById('vaultReleaseTime').value;
     const rpc = document.getElementById('vaultRpc').value.trim();
-    
-    let formattedCurrency = formatCurrencyCode(currency);
 
-    if (!seed || !formattedCurrency || !issuer || !dest || !releaseTimeVal) {
-      showAlert('Please fill in all Vault fields.', 'warning');
+    if (!seed) {
+      showAlert('Please enter the Vault Seed.', 'warning');
       return;
     }
+    if (!rpc) {
+      showAlert('Please select a Network RPC endpoint.', 'warning');
+      return;
+    }
+    if (!window.activeMonitorContext) {
+      showAlert('Please select a lockup to monitor from the Dashboard first.', 'warning');
+      return;
+    }
+
+    const { vault: vaultAddress, currency, issuer, recipient: dest, releaseTime: releaseTimeVal } = window.activeMonitorContext;
+    let formattedCurrency = formatCurrencyCode(currency);
 
     if (!xrpl.isValidAddress(dest)) {
       showAlert('Invalid Destination Address.', 'warning');
@@ -6055,6 +6060,14 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         window.saveMemeLockToStorage(newLock);
 
+        window.activeMonitorContext = {
+          vault: vault,
+          currency: currency,
+          issuer: issuer,
+          recipient: recipient,
+          releaseTime: memeLockReleaseTime.value
+        };
+
         // Fill Vault inputs so they can monitor
         const seedInput = document.getElementById('vaultSeed');
         if (seedInput) {
@@ -6876,6 +6889,14 @@ document.addEventListener('DOMContentLoaded', () => {
           const issuer = monitorBtn.getAttribute('data-issuer');
           const recipient = monitorBtn.getAttribute('data-recipient');
           const releaseTime = monitorBtn.getAttribute('data-release');
+
+          window.activeMonitorContext = {
+            vault: vault,
+            currency: currency,
+            issuer: issuer,
+            recipient: recipient,
+            releaseTime: releaseTime
+          };
 
           const seedInput = document.getElementById('vaultSeed');
           if (seedInput) {
