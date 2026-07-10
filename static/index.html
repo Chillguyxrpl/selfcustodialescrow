@@ -990,33 +990,20 @@
                     <input type="password" id="vaultSeed" class="form-control" placeholder="sEd...">
                   </div>
                   <div class="col-md-6 mb-3">
-                    <label class="form-label"><strong>Destination Address</strong></label>
-                    <input type="text" id="vaultDestination" class="form-control" placeholder="r...">
-                  </div>
-                  <div class="col-12 mb-3 vault-trustlines-container" style="display: none;">
-                    <label class="form-label"><strong><i class="bi bi-wallet2 text-primary"></i> Select Token from Wallet Trustlines</strong></label>
-                    <select id="vaultTrustlineSelect" class="form-select">
-                      <option value="">Select a token...</option>
-                    </select>
-                  </div>
-                  <div class="col-md-4 mb-3">
-                    <label class="form-label"><strong>Token Currency Code</strong></label>
-                    <input type="text" id="vaultCurrency" class="form-control" placeholder="e.g. USD">
-                  </div>
-                  <div class="col-md-8 mb-3">
-                    <label class="form-label"><strong>Token Issuer Address</strong></label>
-                    <input type="text" id="vaultIssuer" class="form-control" placeholder="r...">
-                  </div>
-                  <div class="col-md-6 mb-3">
-                    <label class="form-label"><strong>Release Date & Time</strong></label>
-                    <input type="datetime-local" id="vaultReleaseTime" class="form-control">
-                  </div>
-                  <div class="col-md-6 mb-3">
                     <label class="form-label"><strong>Network RPC (WebSocket)</strong></label>
                     <select id="vaultRpc" class="form-select">
                       <option value="wss://s1.ripple.com">Mainnet (wss://s1.ripple.com)</option>
                       <option value="wss://s.altnet.rippletest.net:51233">Testnet (wss://s.altnet.rippletest.net)</option>
                     </select>
+                  </div>
+                  
+                  <!-- Hidden background fields managed via row context -->
+                  <div class="d-none">
+                    <input type="text" id="vaultDestination" class="form-control">
+                    <select id="vaultTrustlineSelect" class="form-select"></select>
+                    <input type="text" id="vaultCurrency" class="form-control">
+                    <input type="text" id="vaultIssuer" class="form-control">
+                    <input type="datetime-local" id="vaultReleaseTime" class="form-control">
                   </div>
                 </div>
                 <div class="d-grid gap-2 d-md-flex mt-2">
