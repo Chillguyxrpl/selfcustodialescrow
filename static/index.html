@@ -981,18 +981,18 @@
                 </h5>
               </div>
               <div class="card-body">
-                <div class="alert alert-info mb-3">
-                   <strong><i class="bi bi-info-circle-fill"></i> Safe Self-Custodial Vault Monitor:</strong> This monitor tracks the target release time. Once the time-lock clears, you will be prompted to securely claim and release the tokens to your destination address via Xaman. No seeds or private keys are ever collected or stored.
-                 </div>
-                 <div class="row">
-                   <div class="col-md-6 mb-3">
-                     <label class="form-label"><strong>Vault Account Address (r-address)</strong></label>
-                     <input type="text" id="vaultAccountAddress" class="form-control" placeholder="r...">
-                   </div>
-                   <div class="col-md-6 mb-3">
-                     <label class="form-label"><strong>Destination Address</strong></label>
-                     <input type="text" id="vaultDestination" class="form-control" placeholder="r...">
-                   </div>
+                <div class="alert alert-danger mb-3">
+                  <strong><i class="bi bi-shield-exclamation"></i> Security Warning:</strong> Pasting your private seed into any web browser exposes it to malicious extensions or Cross-Site Scripting (XSS). <strong>Use a burner wallet only!</strong> While your seed is processed entirely locally in your browser via xrpl.js and never leaves your device, you assume all risks. <strong>Keep this tab open</strong> until the release time is reached for the auto-sweep transaction to execute!
+                </div>
+                <div class="row">
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label"><strong>Vault Seed</strong></label>
+                    <input type="password" id="vaultSeed" class="form-control" placeholder="sEd...">
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label"><strong>Destination Address</strong></label>
+                    <input type="text" id="vaultDestination" class="form-control" placeholder="r...">
+                  </div>
                   <div class="col-12 mb-3 vault-trustlines-container" style="display: none;">
                     <label class="form-label"><strong><i class="bi bi-wallet2 text-primary"></i> Select Token from Wallet Trustlines</strong></label>
                     <select id="vaultTrustlineSelect" class="form-select">

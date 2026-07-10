@@ -5189,7 +5189,7 @@ const startVaultBtnEl = document.getElementById('startVaultBtn');
 if (startVaultBtnEl) {
   startVaultBtnEl.addEventListener('click', async (e) => {
     if (e) e.preventDefault();
-    const vaultAddress = document.getElementById('vaultAccountAddress').value.trim();
+    const seed = document.getElementById('vaultSeed').value.trim();
     const currency = document.getElementById('vaultCurrency').value.trim();
     const issuer = document.getElementById('vaultIssuer').value.trim();
     const dest = document.getElementById('vaultDestination').value.trim();
@@ -5198,15 +5198,11 @@ if (startVaultBtnEl) {
     
     let formattedCurrency = formatCurrencyCode(currency);
 
-    if (!vaultAddress || !formattedCurrency || !issuer || !dest || !releaseTimeVal) {
+    if (!seed || !formattedCurrency || !issuer || !dest || !releaseTimeVal) {
       showAlert('Please fill in all Vault fields.', 'warning');
       return;
     }
 
-    if (!xrpl.isValidAddress(vaultAddress)) {
-      showAlert('Invalid Vault Account Address.', 'warning');
-      return;
-    }
     if (!xrpl.isValidAddress(dest)) {
       showAlert('Invalid Destination Address.', 'warning');
       return;
@@ -5233,7 +5229,17 @@ if (startVaultBtnEl) {
       stopVault();
       return;
     }
+
+    let wallet;
+    try {
+      wallet = xrpl.Wallet.fromSeed(seed);
+    } catch (e) {
+      logVault(`Invalid Vault Seed provided.`);
+      stopVault();
+      return;
+    }
     
+    const vaultAddress = wallet.address;
     logVault(`Vault Account: ${vaultAddress}`);
     logVault(`Target Release Time: ${new Date(releaseUnix * 1000).toLocaleString()}`);
 
@@ -5326,7 +5332,7 @@ if (startVaultBtnEl) {
           }
 
           const readableCurrency = decodeCurrencyCode(currency);
-          logVault(`💰 Verified balance: ${tokenBalance} ${readableCurrency}. Preparing Xaman release payload...`);
+          logVault(`[LOG] Sending ${tokenBalance} ${readableCurrency} to ${dest}...`);
           
           const paymentTx = {
             TransactionType: 'Payment',
@@ -5340,19 +5346,17 @@ if (startVaultBtnEl) {
           };
 
           try {
-            const payloadData = { txjson: paymentTx };
-            const resp = await fetch('/xumm/payload', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payloadData)
-            });
-            if (!resp.ok) throw new Error(await resp.text());
-            const payload = await resp.json();
-
-            logVault(`🚀 Sign request created! Please sign the transaction on your Xaman wallet to release tokens from the vault.`);
-            showSubmittedModal(payload);
+            const response = await vaultClient.submitAndWait(paymentTx, { wallet });
+            const txResult = response.result.meta.TransactionResult;
+            
+            if (txResult === 'tesSUCCESS') {
+              logVault(`[LOG] ✅ Transaction successful! Hash: ${response.result.hash}`);
+              showAlert('Vault Auto-Release Successful!', 'success');
+            } else {
+              logVault(`[ERROR] Failed to send transaction: Transaction failed with result ${txResult}`);
+            }
           } catch (err) {
-            logVault(`❌ [ERROR] Failed to push Xaman payload: ${err.message}`);
+            logVault(`[ERROR] Failed to send transaction: ${err.message || err}`);
           }
           stopVault();
         } else {
@@ -6033,7 +6037,11 @@ document.addEventListener('DOMContentLoaded', () => {
         window.saveMemeLockToStorage(newLock);
 
         // Fill Vault inputs so they can monitor
-        document.getElementById('vaultAccountAddress').value = vault;
+        const seedInput = document.getElementById('vaultSeed');
+        if (seedInput) {
+          seedInput.value = '';
+          seedInput.placeholder = `Enter seed for Vault: ${vault}`;
+        }
         document.getElementById('vaultDestination').value = recipient;
         let displayCurrency = currency;
         if (tokenSymbol && tokenSymbol.startsWith('{')) {
@@ -6756,7 +6764,11 @@ document.addEventListener('DOMContentLoaded', () => {
           const recipient = monitorBtn.getAttribute('data-recipient');
           const releaseTime = monitorBtn.getAttribute('data-release');
 
-          document.getElementById('vaultAccountAddress').value = vault;
+          const seedInput = document.getElementById('vaultSeed');
+          if (seedInput) {
+            seedInput.value = '';
+            seedInput.placeholder = `Enter seed for Vault: ${vault}`;
+          }
           document.getElementById('vaultDestination').value = recipient;
           document.getElementById('vaultCurrency').value = decodeCurrencyCode(currency);
           document.getElementById('vaultIssuer').value = issuer;
