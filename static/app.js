@@ -5209,10 +5209,6 @@ if (startVaultBtnEl) {
     }
 
     const releaseUnix = Math.floor(new Date(releaseTimeVal).getTime() / 1000);
-    if (releaseUnix < Math.floor(Date.now() / 1000)) {
-      showAlert('Release time must be in the future.', 'warning');
-      return;
-    }
 
     document.getElementById('startVaultBtn').style.display = 'none';
     document.getElementById('stopVaultBtn').style.display = 'inline-block';
@@ -5275,6 +5271,83 @@ if (startVaultBtnEl) {
       return;
     }
 
+    const executeSweep = async () => {
+      try {
+        logVault('Verifying balances for sweep...');
+        const accountLinesReq = await vaultClient.request({ command: 'account_lines', account: vaultAddress, peer: issuer });
+        const trustline = accountLinesReq.result.lines.find(l => {
+          if (l.account !== issuer) return false;
+          const ledgerDecoded = decodeCurrencyCode(l.currency).toUpperCase().trim();
+          const targetDecoded = decodeCurrencyCode(currency).toUpperCase().trim();
+          const formattedDecoded = decodeCurrencyCode(formattedCurrency).toUpperCase().trim();
+          return l.currency === currency || 
+                 l.currency === formattedCurrency || 
+                 ledgerDecoded === targetDecoded || 
+                 ledgerDecoded === formattedDecoded;
+        });
+
+        if (!trustline) {
+          const readableCurrency = decodeCurrencyCode(currency);
+          logVault(`❌ [ERROR] Trustline for ${readableCurrency} (${issuer}) not found on the vault account.`);
+          return stopVault();
+        }
+
+        const tokenBalance = parseFloat(trustline.balance);
+        if (tokenBalance <= 0) {
+          logVault(`❌ Insufficient Layer 2 token balance. Current balance: ${tokenBalance}`);
+          return stopVault();
+        }
+
+        const destLinesReq = await vaultClient.request({ command: 'account_lines', account: dest, peer: issuer });
+        const destTrustline = destLinesReq.result.lines.find(l => {
+          if (l.account !== issuer) return false;
+          const ledgerDecoded = decodeCurrencyCode(l.currency).toUpperCase().trim();
+          const targetDecoded = decodeCurrencyCode(currency).toUpperCase().trim();
+          const formattedDecoded = decodeCurrencyCode(formattedCurrency).toUpperCase().trim();
+          return l.currency === currency || 
+                 l.currency === formattedCurrency || 
+                 ledgerDecoded === targetDecoded || 
+                 ledgerDecoded === formattedDecoded;
+        });
+
+        if (!destTrustline && dest !== issuer) {
+          const readableCurrency = decodeCurrencyCode(currency);
+          logVault(`❌ [ERROR] Destination address ${dest} does not have an active trustline for ${readableCurrency} (${issuer}).`);
+          return stopVault();
+        }
+
+        const readableCurrency = decodeCurrencyCode(currency);
+        logVault(`[LOG] Sending ${tokenBalance} ${readableCurrency} to ${dest}...`);
+        logVault('[LOG] Signing release payload with vault key...');
+        
+        const paymentTx = {
+          TransactionType: 'Payment',
+          Account: vaultAddress,
+          Destination: dest,
+          Amount: {
+            currency: formatCurrencyCode(currency),
+            issuer: issuer,
+            value: trustline.balance
+          }
+        };
+
+        logVault('[LOG] Broadcasting transaction to the ledger...');
+        const response = await vaultClient.submitAndWait(paymentTx, { wallet });
+        const txResult = response.result.meta.TransactionResult;
+        
+        if (txResult === 'tesSUCCESS') {
+          logVault('[LOG] ✅ Auto-release successful! Tokens returned.');
+          logVault(`[LOG] Hash: ${response.result.hash}`);
+          showAlert('Vault Auto-Release Successful!', 'success');
+        } else {
+          logVault(`[ERROR] Failed to send transaction: Transaction failed with result ${txResult}`);
+        }
+      } catch (err) {
+        logVault(`[ERROR] Failed to send transaction: ${err.message || err}`);
+      }
+      stopVault();
+    };
+
     const checkTime = async () => {
       if (!vaultClient.isConnected()) {
         logVault('Reconnecting to node...');
@@ -5286,82 +5359,9 @@ if (startVaultBtnEl) {
         const currentUnixTime = ledgerReq.result.ledger.close_time + 946684800; // Offset XRPL Epoch to Unix Epoch
 
         if (currentUnixTime >= releaseUnix) {
-          logVault('✅ Time-lock cleared! Verifying balances...');
+          logVault('✅ Time-lock cleared!');
           if (vaultMonitorTimer) clearInterval(vaultMonitorTimer);
-
-          const accountLinesReq = await vaultClient.request({ command: 'account_lines', account: vaultAddress, peer: issuer });
-          const trustline = accountLinesReq.result.lines.find(l => {
-            if (l.account !== issuer) return false;
-            const ledgerDecoded = decodeCurrencyCode(l.currency).toUpperCase().trim();
-            const targetDecoded = decodeCurrencyCode(currency).toUpperCase().trim();
-            const formattedDecoded = decodeCurrencyCode(formattedCurrency).toUpperCase().trim();
-            return l.currency === currency || 
-                   l.currency === formattedCurrency || 
-                   ledgerDecoded === targetDecoded || 
-                   ledgerDecoded === formattedDecoded;
-          });
-
-          if (!trustline) {
-            const readableCurrency = decodeCurrencyCode(currency);
-            logVault(`❌ [ERROR] Trustline for ${readableCurrency} (${issuer}) not found on the vault account.`);
-            return stopVault();
-          }
-
-          const tokenBalance = parseFloat(trustline.balance);
-          if (tokenBalance <= 0) {
-            logVault(`❌ Insufficient Layer 2 token balance. Current balance: ${tokenBalance}`);
-            return stopVault();
-          }
-
-          const destLinesReq = await vaultClient.request({ command: 'account_lines', account: dest, peer: issuer });
-          const destTrustline = destLinesReq.result.lines.find(l => {
-            if (l.account !== issuer) return false;
-            const ledgerDecoded = decodeCurrencyCode(l.currency).toUpperCase().trim();
-            const targetDecoded = decodeCurrencyCode(currency).toUpperCase().trim();
-            const formattedDecoded = decodeCurrencyCode(formattedCurrency).toUpperCase().trim();
-            return l.currency === currency || 
-                   l.currency === formattedCurrency || 
-                   ledgerDecoded === targetDecoded || 
-                   ledgerDecoded === formattedDecoded;
-          });
-
-          if (!destTrustline && dest !== issuer) {
-            const readableCurrency = decodeCurrencyCode(currency);
-            logVault(`❌ [ERROR] Destination address ${dest} does not have an active trustline for ${readableCurrency} (${issuer}).`);
-            return stopVault();
-          }
-
-          const readableCurrency = decodeCurrencyCode(currency);
-          logVault(`[LOG] Sending ${tokenBalance} ${readableCurrency} to ${dest}...`);
-          logVault('[LOG] Signing release payload with vault key...');
-          
-          const paymentTx = {
-            TransactionType: 'Payment',
-            Account: vaultAddress,
-            Destination: dest,
-            Amount: {
-              currency: formatCurrencyCode(currency),
-              issuer: issuer,
-              value: trustline.balance
-            }
-          };
-
-          try {
-            logVault('[LOG] Broadcasting transaction to the ledger...');
-            const response = await vaultClient.submitAndWait(paymentTx, { wallet });
-            const txResult = response.result.meta.TransactionResult;
-            
-            if (txResult === 'tesSUCCESS') {
-              logVault('[LOG] ✅ Auto-release successful! Tokens returned.');
-              logVault(`[LOG] Hash: ${response.result.hash}`);
-              showAlert('Vault Auto-Release Successful!', 'success');
-            } else {
-              logVault(`[ERROR] Failed to send transaction: Transaction failed with result ${txResult}`);
-            }
-          } catch (err) {
-            logVault(`[ERROR] Failed to send transaction: ${err.message || err}`);
-          }
-          stopVault();
+          await executeSweep();
         } else {
           const remaining = releaseUnix - currentUnixTime;
           logVault(`⏳ Waiting... ${remaining} seconds remaining until release.`);
@@ -5371,8 +5371,22 @@ if (startVaultBtnEl) {
       }
     };
 
-    vaultMonitorTimer = setInterval(checkTime, 10000); // Poll every 10 seconds
-    checkTime(); // Execute immediately once
+    // Compare times immediately at startup using validated ledger close time
+    let currentUnixTime;
+    try {
+      const ledgerReq = await vaultClient.request({ command: 'ledger', ledger_index: 'validated' });
+      currentUnixTime = ledgerReq.result.ledger.close_time + 946684800;
+    } catch (e) {
+      currentUnixTime = Math.floor(Date.now() / 1000);
+    }
+
+    if (currentUnixTime >= releaseUnix) {
+      logVault('[LOG] Release time already reached. Skipping countdown and initializing immediate sweep...');
+      await executeSweep();
+    } else {
+      vaultMonitorTimer = setInterval(checkTime, 10000); // Poll every 10 seconds
+      checkTime(); // Execute immediately once
+    }
   });
 }
 
