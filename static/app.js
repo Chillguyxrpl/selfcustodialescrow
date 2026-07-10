@@ -6610,6 +6610,29 @@ document.addEventListener('DOMContentLoaded', () => {
     window.updateMemeDashboardCountdowns();
   };
 
+  window.fetchSingleMemeBalance = async function(lock) {
+    if (lock._fetching) return;
+    lock._fetching = true;
+    const rpc = document.getElementById('vaultRpc').value.trim() || 'https://s1.ripple.com:51234/';
+    const tempClient = new xrpl.Client(rpc);
+    try {
+      await tempClient.connect();
+      const lines = await tempClient.request({ command: 'account_lines', account: lock.vault, peer: lock.issuer });
+      const trustline = lines.result.lines.find(l => l.currency === lock.currency || l.currency === formatCurrencyCode(lock.currency));
+      lock.currentBalance = trustline ? parseFloat(trustline.balance) : 0;
+      window.renderMemeDashboardTable();
+    } catch (e) {
+      console.error(`Failed single fetch for ${lock.vault}:`, e);
+      lock.currentBalance = 0; // Default to 0 so it moves to history if the vault is empty/unfunded
+      window.renderMemeDashboardTable();
+    } finally {
+      lock._fetching = false;
+      if (tempClient.isConnected()) {
+        await tempClient.disconnect();
+      }
+    }
+  };
+
   window.updateMemeDashboardCountdowns = function() {
     const tbody = document.getElementById('memeDashboardBody');
     if (!tbody || !window.activeMemeLocks || window.activeMemeLocks.length === 0) return;
@@ -6626,7 +6649,31 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!countdownEl) return;
 
       const releaseUnix = Math.floor(new Date(lock.releaseTime).getTime() / 1000);
+      if (isNaN(releaseUnix)) {
+        countdownEl.innerHTML = '<span class="badge bg-danger-subtle text-danger border border-danger-subtle">⚠️ Invalid Date</span>';
+        return;
+      }
+
       const balance = lock.currentBalance !== undefined ? lock.currentBalance : lock.amount;
+
+      // Conditional Gate: check if the timestamp is in the past
+      if (nowUnix >= releaseUnix) {
+        // Trigger a background single-item fetch if current balance is unknown
+        if (lock.currentBalance === undefined) {
+          window.fetchSingleMemeBalance(lock);
+        }
+
+        if (balance <= 0) {
+          lock.currentBalance = 0;
+          if (activeTab === 'active') {
+            // Sweep complete - auto-migrate immediately by triggering re-render
+            setTimeout(() => {
+              window.renderMemeDashboardTable();
+            }, 0);
+            return;
+          }
+        }
+      }
 
       if (activeTab === 'history') {
         countdownEl.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-circle-fill"></i> Sweep Complete</span>';
