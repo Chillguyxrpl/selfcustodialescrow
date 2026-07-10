@@ -227,6 +227,21 @@ function updateTemplateList() {
           const area = row.querySelector('.fields-content-area');
           if (area) {
             area.style.display = 'none';
+            // Move shared elements back to templatesSection to prevent destruction
+            const templatesSection = document.getElementById('templatesSection');
+            if (templatesSection) {
+              const durationRow = document.getElementById('escrowDurationRow');
+              const templateFields = document.getElementById('templateFields');
+              const buildPayloadBtn = document.getElementById('buildPayloadWrapper');
+              const payloadResult = document.getElementById('payloadResult');
+              const payloadPollingStatus = document.getElementById('payloadPollingStatus');
+              
+              if (durationRow && area.contains(durationRow)) templatesSection.appendChild(durationRow);
+              if (templateFields && area.contains(templateFields)) templatesSection.appendChild(templateFields);
+              if (buildPayloadBtn && area.contains(buildPayloadBtn)) templatesSection.appendChild(buildPayloadBtn);
+              if (payloadResult && area.contains(payloadResult)) templatesSection.appendChild(payloadResult);
+              if (payloadPollingStatus && area.contains(payloadPollingStatus)) templatesSection.appendChild(payloadPollingStatus);
+            }
             area.innerHTML = '';
           }
           const btn = row.querySelector('button');
