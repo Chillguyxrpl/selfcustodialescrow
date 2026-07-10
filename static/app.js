@@ -1,5 +1,27 @@
 window.escrowViewType = localStorage.getItem('escrowViewType') || 'grid';
 
+// --- Theme Toggle ---
+function initThemeToggle() {
+  const storedTheme = localStorage.getItem('theme');
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  let currentTheme = storedTheme || (prefersDark ? 'dark' : 'light');
+
+  document.documentElement.setAttribute('data-bs-theme', currentTheme);
+
+  const toggleBtn = document.getElementById('themeToggleBtn');
+  if (toggleBtn) {
+    toggleBtn.innerHTML = currentTheme === 'dark' ? '<i class="bi bi-sun-fill"></i> Theme' : '<i class="bi bi-moon-stars-fill"></i> Theme';
+
+    toggleBtn.addEventListener('click', () => {
+      currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-bs-theme', currentTheme);
+      localStorage.setItem('theme', currentTheme);
+      toggleBtn.innerHTML = currentTheme === 'dark' ? '<i class="bi bi-sun-fill"></i> Theme' : '<i class="bi bi-moon-stars-fill"></i> Theme';
+    });
+  }
+}
+initThemeToggle();
+
 // Cache frequently-used DOM elements to reduce lookups
 const templateSelectEl = document.getElementById('templateSelect');
 const templateFieldsEl = document.getElementById('templateFields');
@@ -4872,27 +4894,6 @@ if (window.connectedAccount) {
 loadTemplates();
 initTooltips();
 
-// --- Theme Toggle ---
-function initThemeToggle() {
-  const storedTheme = localStorage.getItem('theme');
-  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  let currentTheme = storedTheme || (prefersDark ? 'dark' : 'light');
-
-  document.documentElement.setAttribute('data-bs-theme', currentTheme);
-
-  const toggleBtn = document.getElementById('themeToggleBtn');
-  if (toggleBtn) {
-    toggleBtn.innerHTML = currentTheme === 'dark' ? '<i class="bi bi-sun-fill"></i>' : '<i class="bi bi-moon-stars-fill"></i>';
-
-    toggleBtn.addEventListener('click', () => {
-      currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-bs-theme', currentTheme);
-      localStorage.setItem('theme', currentTheme);
-      toggleBtn.innerHTML = currentTheme === 'dark' ? '<i class="bi bi-sun-fill"></i>' : '<i class="bi bi-moon-stars-fill"></i>';
-    });
-  }
-}
-initThemeToggle();
 
 // --- Token Lookup Integration (xrplmeta.org) ---
 function initTokenSearch() {
