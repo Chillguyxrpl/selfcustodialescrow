@@ -79,6 +79,150 @@ function escapeHtml(unsafe) {
        .replace(/'/g, "&#039;");
 }
 
+window.userTrustlines = [];
+
+async function fetchUserTrustlines(account) {
+  if (!account) {
+    window.userTrustlines = [];
+    updateFormTrustlinesDropdowns();
+    return;
+  }
+  try {
+    const resp = await fetch(`/account_trustlines/${account}`);
+    if (resp.ok) {
+      const data = await resp.json();
+      window.userTrustlines = data.trustlines || [];
+      updateFormTrustlinesDropdowns();
+    }
+  } catch (err) {
+    console.error('Error fetching trustlines:', err);
+  }
+}
+
+function populateTrustlinesDropdown(selectEl, curInput, issInput) {
+  if (!selectEl) return;
+  selectEl.innerHTML = '';
+  
+  const trustlines = window.userTrustlines || [];
+  if (trustlines.length === 0) {
+    const parentContainer = selectEl.closest('.trustlines-dropdown-container');
+    if (parentContainer) parentContainer.style.display = 'none';
+    return;
+  }
+
+  const parentContainer = selectEl.closest('.trustlines-dropdown-container');
+  if (parentContainer) parentContainer.style.display = 'block';
+
+  // Add default option
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Select a token from your trustlines...';
+  selectEl.appendChild(placeholder);
+
+  trustlines.forEach(tl => {
+    const opt = document.createElement('option');
+    opt.value = JSON.stringify({ currency: tl.decoded_currency || tl.currency, issuer: tl.issuer });
+    
+    const displayName = tl.name && tl.name !== tl.decoded_currency ? 
+      `${tl.name} (${tl.decoded_currency})` : 
+      tl.decoded_currency;
+    
+    opt.textContent = `${displayName} (Balance: ${parseFloat(tl.balance).toLocaleString(undefined, {maximumFractionDigits: 6})} • Limit: ${parseFloat(tl.limit).toLocaleString(undefined, {maximumFractionDigits: 6})})`;
+    selectEl.appendChild(opt);
+  });
+
+  // When selected, auto-fill inputs
+  selectEl.addEventListener('change', () => {
+    if (!selectEl.value) return;
+    try {
+      const { currency, issuer } = JSON.parse(selectEl.value);
+      if (curInput && issInput) {
+        curInput.value = currency;
+        issInput.value = issuer;
+        curInput.dispatchEvent(new Event('input', { bubbles: true }));
+        issInput.dispatchEvent(new Event('input', { bubbles: true }));
+        curInput.dispatchEvent(new Event('blur', { bubbles: true }));
+        issInput.dispatchEvent(new Event('blur', { bubbles: true }));
+      }
+    } catch (e) {
+      console.error('Error selecting trustline:', e);
+    }
+  });
+}
+
+function updateFormTrustlinesDropdowns() {
+  const dropdowns = document.querySelectorAll('.trustlines-select');
+  dropdowns.forEach(selectEl => {
+    const tokenGroup = selectEl.closest('.token-group');
+    if (tokenGroup) {
+      const curInput = tokenGroup.querySelector('#field_AMOUNT_CURRENCY');
+      const issInput = tokenGroup.querySelector('#field_AMOUNT_ISSUER');
+      populateTrustlinesDropdown(selectEl, curInput, issInput);
+    }
+  });
+}
+
+function updateSelectedTokenBadge(tokenGroup, name, domain, icon) {
+  if (!tokenGroup) return;
+  let badge = tokenGroup.querySelector('.selected-token-badge-container');
+  if (!badge) {
+    badge = document.createElement('div');
+    badge.className = 'selected-token-badge-container col-12 mt-2';
+    tokenGroup.appendChild(badge);
+  }
+  
+  if (!name && !domain && !icon) {
+    badge.style.display = 'none';
+    badge.innerHTML = '';
+    return;
+  }
+  
+  badge.style.display = 'block';
+  const imgHtml = icon ? `<img src="${escapeHtml(icon)}" class="me-2 rounded-circle shadow-sm" style="width: 24px; height: 24px; object-fit: cover; border: 1px solid #ddd; vertical-align: middle;">` : `<i class="bi bi-coin me-2 fs-5 text-primary" style="vertical-align: middle;"></i>`;
+  const domainHtml = domain && domain !== 'Unknown source' ? `<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle ms-2" style="font-size: 0.7rem;">${escapeHtml(domain)}</span>` : '';
+  
+  badge.innerHTML = `
+    <div class="d-flex align-items-center bg-light p-2 rounded border shadow-sm w-100">
+      ${imgHtml}
+      <div class="d-flex align-items-center flex-wrap gap-1">
+        <strong class="text-dark" style="font-size: 0.85rem;">${escapeHtml(name)}</strong>
+        ${domainHtml}
+      </div>
+    </div>
+  `;
+}
+
+const fetchAndShowTokenBadge = debounce(async (tokenGroup, currency, issuer) => {
+  if (!currency || !issuer || issuer.length < 25) {
+    updateSelectedTokenBadge(tokenGroup, null, null, null);
+    return;
+  }
+  
+  const matched = (window.userTrustlines || []).find(tl => 
+    (tl.currency === currency || tl.decoded_currency === currency) && tl.issuer === issuer
+  );
+  if (matched) {
+    updateSelectedTokenBadge(tokenGroup, matched.name, matched.domain, matched.icon);
+    return;
+  }
+  
+  try {
+    const resp = await fetch(`/search_tokens?currency=${encodeURIComponent(currency)}`);
+    if (resp.ok) {
+      const data = await resp.json();
+      const tokens = data.tokens || [];
+      const token = tokens.find(t => t.issuer === issuer);
+      if (token) {
+        updateSelectedTokenBadge(tokenGroup, token.name || (token.meta && token.meta.name), token.domain || (token.meta && token.meta.domain), token.meta && token.meta.token && token.meta.token.icon);
+      } else {
+        updateSelectedTokenBadge(tokenGroup, currency, 'Unknown issuer', null);
+      }
+    }
+  } catch (err) {
+    updateSelectedTokenBadge(tokenGroup, currency, 'Unknown issuer', null);
+  }
+}, 300);
+
 async function loadTemplates() {
   try {
     const resp = await fetch('/templates');
@@ -954,6 +1098,30 @@ function renderFields() {
         }
       });
       tokenSearchCol.appendChild(tokenSearchBtn);
+
+      // Create Trustlines Dropdown element
+      const trustlinesCol = document.createElement('div');
+      trustlinesCol.className = 'col-12 mb-2 trustlines-dropdown-container';
+      trustlinesCol.style.display = 'none';
+      const trustlinesLabel = document.createElement('label');
+      trustlinesLabel.className = 'form-label small fw-bold text-secondary mb-1';
+      trustlinesLabel.innerHTML = '<i class="bi bi-wallet2"></i> Select from connected wallet trustlines:';
+      const trustlinesSelect = document.createElement('select');
+      trustlinesSelect.className = 'form-select form-select-sm trustlines-select';
+      trustlinesCol.appendChild(trustlinesLabel);
+      trustlinesCol.appendChild(trustlinesSelect);
+      tokenGroup.appendChild(trustlinesCol);
+      
+      // Populate it immediately if trustlines are loaded
+      populateTrustlinesDropdown(trustlinesSelect, tokenCurInput, tokenIssInput);
+
+      // Listen for events to show the badge
+      tokenCurInput.addEventListener('input', () => {
+        fetchAndShowTokenBadge(tokenGroup, tokenCurInput.value.trim(), tokenIssInput.value.trim());
+      });
+      tokenIssInput.addEventListener('input', () => {
+        fetchAndShowTokenBadge(tokenGroup, tokenCurInput.value.trim(), tokenIssInput.value.trim());
+      });
 
       tokenGroup.appendChild(tokenValCol);
       tokenGroup.appendChild(tokenCurCol);
@@ -3256,6 +3424,7 @@ function updateXamanUI(account) {
     disconnectBtn.addEventListener('click', () => {
       window.connectedAccount = null;
       window.connectedUserToken = null;
+      window.userTrustlines = [];
       localStorage.removeItem('xamanUserToken');
       localStorage.removeItem('xamanAccount');
       connectXamanBtnEl.innerHTML = '<i class="bi bi-qr-code-scan"></i> Connect Wallet';
@@ -3265,12 +3434,14 @@ function updateXamanUI(account) {
       document.getElementById('copyAddressBtn')?.remove();
       disconnectBtn.remove();
       updateDashboard(null);
+      updateFormTrustlinesDropdowns();
     });
     const copyBtnNode = document.getElementById('copyAddressBtn');
     connectXamanBtnEl.parentNode.insertBefore(disconnectBtn, copyBtnNode.nextSibling);
   }
 
   updateDashboard(account);
+  fetchUserTrustlines(account);
 
   // Auto-fill form fields if a template is currently open and inputs are empty
   const accountInput = document.getElementById('field_ACCOUNT');
@@ -3289,6 +3460,7 @@ function updateXamanUI(account) {
 
 if (window.connectedAccount) {
   updateXamanUI(window.connectedAccount);
+  fetchUserTrustlines(window.connectedAccount);
 } else {
   updateDashboard(null);
 }

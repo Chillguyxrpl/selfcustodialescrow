@@ -685,6 +685,87 @@ def check_trustline(request: Request, destination: str, issuer: str, currency: s
                 raise HTTPException(status_code=500, detail=f"XRPL connection error: {str(e)}")
 
 
+@app.get("/account_trustlines/{account}")
+def get_account_trustlines(account: str):
+    """Fetch active trustlines (IOU tokens) for a given account from the XRPL, enhanced with registry metadata."""
+    account = account.strip()
+    if not is_valid_xrpl_address(account):
+        raise HTTPException(status_code=400, detail="Invalid account address format. Must be a valid XRPL r-address.")
+        
+    rpc_req = {
+        "method": "account_lines",
+        "params": [{"account": account, "ledger_index": "validated", "limit": 400}]
+    }
+    
+    try:
+        r = session.post(XRPL_RPC, json=rpc_req, timeout=10)
+        if r.status_code != 200:
+            return {"trustlines": []}
+            
+        data = r.json()
+        if "error" in data.get("result", {}):
+            err = data["result"].get("error_message", data["result"].get("error"))
+            if data["result"].get("error") == "actNotFound":
+                return {"trustlines": [], "error": "Account not found"}
+            raise HTTPException(status_code=400, detail=f"XRPL error: {err}")
+            
+        lines = data["result"].get("lines", [])
+        
+        from concurrent.futures import ThreadPoolExecutor
+        
+        def fetch_metadata(line):
+            currency = line.get("currency", "")
+            issuer = line.get("account", "")
+            balance = line.get("balance", "0")
+            limit = line.get("limit", "0")
+            
+            # Decode currency
+            decoded_cur = currency
+            if len(currency) == 40:
+                try:
+                    decoded_cur = bytes.fromhex(currency).decode("utf-8").replace("\x00", "").strip()
+                except Exception:
+                    pass
+            
+            meta_res = {
+                "currency": currency,
+                "decoded_currency": decoded_cur,
+                "issuer": issuer,
+                "balance": balance,
+                "limit": limit,
+                "name": decoded_cur,
+                "domain": "Unknown source",
+                "icon": ""
+            }
+            
+            # Query active v2 registry node for metadata
+            try:
+                token_url = f"https://s1.xrplmeta.org/v2/token/{currency}:{issuer}"
+                meta_r = session.get(token_url, timeout=3)
+                if meta_r.status_code == 200:
+                    token_data = meta_r.json()
+                    t_meta = token_data.get("meta", {}) or {}
+                    token_meta = t_meta.get("token", {}) or {}
+                    issuer_meta = t_meta.get("issuer", {}) or {}
+                    
+                    meta_res["name"] = token_meta.get("name") or issuer_meta.get("name") or decoded_cur
+                    meta_res["domain"] = issuer_meta.get("domain") or "Unknown source"
+                    meta_res["icon"] = token_meta.get("icon") or ""
+            except Exception:
+                pass
+                
+            return meta_res
+
+        # Concurrently fetch metadata for up to first 50 trustlines
+        trustlines_to_fetch = lines[:50]
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            enhanced_lines = list(executor.map(fetch_metadata, trustlines_to_fetch))
+            
+        return {"trustlines": enhanced_lines}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch trustlines: {str(e)}")
+
+
 @app.get("/active_escrows/{account}")
 def get_active_escrows(request: Request, account: str):
     """Fetch active incoming and outgoing escrows for a given account from the XRPL."""
