@@ -3733,6 +3733,7 @@ function updateXamanUI(account) {
 
   updateDashboard(account);
   fetchUserTrustlines(account);
+  initMemeDashboard();
 
   // Auto-fill form fields if a template is currently open and inputs are empty
   const accountInput = document.getElementById('field_ACCOUNT');
