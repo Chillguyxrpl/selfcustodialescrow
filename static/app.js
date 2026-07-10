@@ -203,6 +203,7 @@ function updateFormTrustlinesDropdowns() {
     }
   });
   populateMemeTokenSelect();
+  populateVaultTrustlinesDropdown();
 }
 
 function populateMemeTokenSelect() {
@@ -284,6 +285,92 @@ function populateMemeTokenSelect() {
   customOpt.value = 'custom';
   customOpt.textContent = '-- Custom Token Search --';
   selectEl.appendChild(customOpt);
+}
+
+function populateVaultTrustlinesDropdown() {
+  const selectEl = document.getElementById('vaultTrustlineSelect');
+  if (!selectEl) return;
+  selectEl.innerHTML = '';
+  selectEl.disabled = false;
+
+  const parentContainer = selectEl.closest('.vault-trustlines-container');
+  
+  // If no wallet connected, hide the container completely
+  if (!window.connectedAccount) {
+    if (parentContainer) parentContainer.style.display = 'none';
+    return;
+  }
+
+  if (parentContainer) parentContainer.style.display = 'block';
+
+  // If currently loading
+  if (window.loadingTrustlines) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '⏳ Loading trustlines from ledger...';
+    selectEl.appendChild(opt);
+    selectEl.disabled = true;
+    return;
+  }
+
+  const trustlines = window.userTrustlines || [];
+  if (trustlines.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '❌ No active trustlines found for this account';
+    selectEl.appendChild(opt);
+    selectEl.disabled = true;
+    return;
+  }
+
+  // Add default option
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Select a token from your trustlines...';
+  selectEl.appendChild(placeholder);
+
+  trustlines.forEach(tl => {
+    const opt = document.createElement('option');
+    opt.value = JSON.stringify({ currency: tl.currency, issuer: tl.issuer });
+    
+    const currency = tl.currency;
+    const decodedVal = decodeCurrencyCode(currency);
+    const balanceFormatted = parseFloat(tl.balance).toLocaleString(undefined, {maximumFractionDigits: 6});
+    const limitFormatted = parseFloat(tl.limit).toLocaleString(undefined, {maximumFractionDigits: 6});
+    
+    if (currency.startsWith('03') && currency.length === 40) {
+      opt.textContent = `AMM Liquidity Pool Token (LP) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
+    } else {
+      const hasDecodedName = decodedVal !== currency;
+      if (!hasDecodedName) {
+        opt.textContent = `${currency} (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
+      } else {
+        const tokenName = tl.name && tl.name !== decodedVal ? tl.name : decodedVal;
+        opt.textContent = `${tokenName} (${decodedVal}) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
+      }
+    }
+    selectEl.appendChild(opt);
+  });
+
+  // When selected, auto-fill inputs
+  const newSelect = selectEl.cloneNode(true);
+  selectEl.parentNode.replaceChild(newSelect, selectEl);
+  newSelect.addEventListener('change', () => {
+    if (!newSelect.value) return;
+    try {
+      const { currency, issuer } = JSON.parse(newSelect.value);
+      const curInput = document.getElementById('vaultCurrency');
+      const issInput = document.getElementById('vaultIssuer');
+      if (curInput && issInput) {
+        curInput.value = decodeCurrencyCode(currency);
+        issInput.value = issuer;
+        curInput.dispatchEvent(new Event('input', { bubbles: true }));
+        issInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    } catch (e) {
+      console.error('Error selecting vault trustline:', e);
+    }
+  });
 }
 
 function updateSelectedTokenBadge(tokenGroup, name, domain, icon) {
