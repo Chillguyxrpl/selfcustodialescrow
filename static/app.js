@@ -204,6 +204,7 @@ function updateFormTrustlinesDropdowns() {
   });
   populateMemeTokenSelect();
   populateVaultTrustlinesDropdown();
+  populateCrowdhdlTokenSelect();
 }
 
 function populateMemeTokenSelect() {
@@ -370,6 +371,72 @@ function populateVaultTrustlinesDropdown() {
     } catch (e) {
       console.error('Error selecting vault trustline:', e);
     }
+  });
+}
+
+function populateCrowdhdlTokenSelect() {
+  const selectEl = document.getElementById('crowdhdlTokenSelect');
+  if (!selectEl) return;
+  selectEl.innerHTML = '';
+  selectEl.disabled = false;
+
+  const parentContainer = selectEl.closest('.crowdhdl-trustlines-container');
+  
+  // If no wallet connected, hide the container completely
+  if (!window.connectedAccount) {
+    if (parentContainer) parentContainer.style.display = 'none';
+    return;
+  }
+
+  if (parentContainer) parentContainer.style.display = 'block';
+
+  // If currently loading
+  if (window.loadingTrustlines) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '⏳ Loading trustlines from ledger...';
+    selectEl.appendChild(opt);
+    selectEl.disabled = true;
+    return;
+  }
+
+  const trustlines = window.userTrustlines || [];
+  if (trustlines.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '❌ No active trustlines found for this account';
+    selectEl.appendChild(opt);
+    selectEl.disabled = true;
+    return;
+  }
+
+  // Add default option
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Select a token from your trustlines...';
+  selectEl.appendChild(placeholder);
+
+  trustlines.forEach(tl => {
+    const opt = document.createElement('option');
+    opt.value = JSON.stringify({ currency: tl.currency, decoded_currency: tl.decoded_currency, issuer: tl.issuer });
+    
+    const currency = tl.currency;
+    const decodedVal = decodeCurrencyCode(currency);
+    const balanceFormatted = parseFloat(tl.balance).toLocaleString(undefined, {maximumFractionDigits: 6});
+    const limitFormatted = parseFloat(tl.limit).toLocaleString(undefined, {maximumFractionDigits: 6});
+    
+    if (currency.startsWith('03') && currency.length === 40) {
+      opt.textContent = `AMM Liquidity Pool Token (LP) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
+    } else {
+      const hasDecodedName = decodedVal !== currency;
+      if (!hasDecodedName) {
+        opt.textContent = `${currency} (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
+      } else {
+        const tokenName = tl.name && tl.name !== decodedVal ? tl.name : decodedVal;
+        opt.textContent = `${tokenName} (${decodedVal}) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
+      }
+    }
+    selectEl.appendChild(opt);
   });
 }
 
@@ -5107,7 +5174,7 @@ const startVaultBtnEl = document.getElementById('startVaultBtn');
 if (startVaultBtnEl) {
   startVaultBtnEl.addEventListener('click', async (e) => {
     if (e) e.preventDefault();
-    const seed = document.getElementById('vaultSeed').value.trim();
+    const vaultAddress = document.getElementById('vaultAccountAddress').value.trim();
     const currency = document.getElementById('vaultCurrency').value.trim();
     const issuer = document.getElementById('vaultIssuer').value.trim();
     const dest = document.getElementById('vaultDestination').value.trim();
@@ -5116,8 +5183,17 @@ if (startVaultBtnEl) {
     
     let formattedCurrency = formatCurrencyCode(currency);
 
-    if (!seed || !formattedCurrency || !issuer || !dest || !releaseTimeVal) {
+    if (!vaultAddress || !formattedCurrency || !issuer || !dest || !releaseTimeVal) {
       showAlert('Please fill in all Vault fields.', 'warning');
+      return;
+    }
+
+    if (!xrpl.isValidAddress(vaultAddress)) {
+      showAlert('Invalid Vault Account Address.', 'warning');
+      return;
+    }
+    if (!xrpl.isValidAddress(dest)) {
+      showAlert('Invalid Destination Address.', 'warning');
       return;
     }
 
@@ -5142,23 +5218,14 @@ if (startVaultBtnEl) {
       stopVault();
       return;
     }
-
-    let wallet;
-    try {
-      wallet = xrpl.Wallet.fromSeed(seed);
-    } catch (e) {
-      logVault(`Invalid Vault Seed provided.`);
-      stopVault();
-      return;
-    }
     
-    logVault(`Vault Account Initialized: ${wallet.address}`);
+    logVault(`Vault Account: ${vaultAddress}`);
     logVault(`Target Release Time: ${new Date(releaseUnix * 1000).toLocaleString()}`);
 
     // Immediate pre-validation of the vault account and trustline
     logVault('Verifying vault account and trustline on-chain...');
     try {
-      const accountLinesReq = await vaultClient.request({ command: 'account_lines', account: wallet.address, peer: issuer });
+      const accountLinesReq = await vaultClient.request({ command: 'account_lines', account: vaultAddress, peer: issuer });
       const trustline = accountLinesReq.result.lines.find(l => {
         if (l.account !== issuer) return false;
         const ledgerDecoded = decodeCurrencyCode(l.currency).toUpperCase().trim();
@@ -5179,7 +5246,7 @@ if (startVaultBtnEl) {
       logVault(`✅ Trustline verified (Current Balance: ${trustline.balance})`);
     } catch (err) {
       if (err.data && err.data.error === 'actNotFound') {
-        logVault(`❌ [ERROR] Vault account ${wallet.address} not found/funded on the ledger.`);
+        logVault(`❌ [ERROR] Vault account ${vaultAddress} not found/funded on the ledger.`);
       } else {
         logVault(`❌ [ERROR] Failed to verify trustline: ${err.message || err}`);
       }
@@ -5201,7 +5268,7 @@ if (startVaultBtnEl) {
           logVault('✅ Time-lock cleared! Verifying balances...');
           if (vaultMonitorTimer) clearInterval(vaultMonitorTimer);
 
-          const accountLinesReq = await vaultClient.request({ command: 'account_lines', account: wallet.address, peer: issuer });
+          const accountLinesReq = await vaultClient.request({ command: 'account_lines', account: vaultAddress, peer: issuer });
           const trustline = accountLinesReq.result.lines.find(l => {
             if (l.account !== issuer) return false;
             const ledgerDecoded = decodeCurrencyCode(l.currency).toUpperCase().trim();
@@ -5244,24 +5311,33 @@ if (startVaultBtnEl) {
           }
 
           const readableCurrency = decodeCurrencyCode(currency);
-          logVault(`💰 Verified balance: ${tokenBalance} ${readableCurrency}. Sending payment...`);
+          logVault(`💰 Verified balance: ${tokenBalance} ${readableCurrency}. Preparing Xaman release payload...`);
           
           const paymentTx = {
             TransactionType: 'Payment',
-            Account: wallet.address,
+            Account: vaultAddress,
             Destination: dest,
-            Amount: { currency, issuer, value: trustline.balance }
+            Amount: {
+              currency: formatCurrencyCode(currency),
+              issuer: issuer,
+              value: trustline.balance
+            }
           };
 
-          const response = await vaultClient.submitAndWait(paymentTx, { wallet });
-          const txResult = response.result.meta.TransactionResult;
-          
-          if (txResult === 'tesSUCCESS') {
-            logVault(`🚀 Success! Tokens successfully released.`);
-            logVault(`🔗 Hash: ${response.result.hash}`);
-            showAlert('Vault Auto-Release Successful!', 'success');
-          } else {
-            logVault(`⚠️ Transaction failed: ${txResult}`);
+          try {
+            const payloadData = { txjson: paymentTx };
+            const resp = await fetch('/xumm/payload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payloadData)
+            });
+            if (!resp.ok) throw new Error(await resp.text());
+            const payload = await resp.json();
+
+            logVault(`🚀 Sign request created! Please sign the transaction on your Xaman wallet to release tokens from the vault.`);
+            showSubmittedModal(payload);
+          } catch (err) {
+            logVault(`❌ [ERROR] Failed to push Xaman payload: ${err.message}`);
           }
           stopVault();
         } else {
@@ -5760,6 +5836,7 @@ document.addEventListener('DOMContentLoaded', () => {
   btnMemeLockupSubmit.addEventListener('click', async () => {
     const amount = parseFloat(memeLockAmount.value);
     const recipient = memeLockRecipient.value.trim();
+    const vault = document.getElementById('memeLockVaultAddress').value.trim();
     const lockType = memeLockType.value;
     const tokenSymbol = memeTokenSelect.value;
     const issuer = memeTokenIssuer.value.trim();
@@ -5767,6 +5844,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!amount || amount <= 0) {
       showAlert('Please enter a valid amount greater than 0.', 'warning');
+      return;
+    }
+    if (!vault) {
+      showAlert('Pool / Vault Address is required.', 'warning');
       return;
     }
     if (!recipient) {
@@ -5895,10 +5976,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     } else {
       // Individual Time Lock / Conditional Escrow
-      if (lockType === 'time') {
-        showAlert('Routing Meme Token Time-Lock to L2 Auto-Release Vault...', 'info');
-        
-        // Fill Vault inputs
+      btnMemeLockupSubmit.setAttribute('disabled', 'true');
+      btnMemeLockupSubmit.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Creating Xaman Payload...';
+
+      try {
+        const payloadData = {
+          txjson: {
+            TransactionType: 'Payment',
+            Account: window.connectedAccount || '',
+            Destination: vault,
+            Amount: {
+              currency: formatCurrencyCode(currency),
+              issuer: issuer,
+              value: amount.toString()
+            }
+          }
+        };
+
+        const resp = await fetch('/xumm/payload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payloadData)
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+        const payload = await resp.json();
+
+        // Show secure sign modal
+        showSubmittedModal(payload);
+
+        // Fill Vault inputs so they can monitor
+        document.getElementById('vaultAccountAddress').value = vault;
         document.getElementById('vaultDestination').value = recipient;
         let displayCurrency = currency;
         if (tokenSymbol && tokenSymbol.startsWith('{')) {
@@ -5916,9 +6023,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Switch to Vault Pane
         const vaultTabBtn = document.getElementById('tab-vault-btn');
         if (vaultTabBtn) vaultTabBtn.click();
-      } else {
-        // Individual Conditional IOU Lockup: not natively supported on XRPL
-        showAlert('Conditional escrow of non-XRP assets is not natively supported by the XRPL. Please use a Time-Lock with L2 Vault, or configure a custom multi-sig pool.', 'warning');
+      } catch (err) {
+        showAlert(`Failed to configure lockup: ${err.message}`, 'error');
+      } finally {
+        btnMemeLockupSubmit.removeAttribute('disabled');
+        btnMemeLockupSubmit.innerHTML = '<i class="bi bi-lock-fill"></i> Lock Meme Tokens';
       }
     }
   });
@@ -6030,8 +6139,26 @@ document.addEventListener('DOMContentLoaded', () => {
   // 6. Crowd-HODL Manager logic
   btnScanCrowdhdl.addEventListener('click', async () => {
     const vault = crowdhdlVaultAddress.value.trim();
+    const tokenVal = document.getElementById('crowdhdlTokenSelect').value;
     if (!vault) {
       showAlert('Please enter a Vault / Pool address to scan.', 'warning');
+      return;
+    }
+    if (!tokenVal) {
+      showAlert('Please select a token to scan deposits for.', 'warning');
+      return;
+    }
+
+    let currencyHex = '';
+    let issuerAddress = '';
+    let readableSymbol = '';
+    try {
+      const parsed = JSON.parse(tokenVal);
+      currencyHex = formatCurrencyCode(parsed.currency);
+      issuerAddress = parsed.issuer;
+      readableSymbol = parsed.decoded_currency || parsed.currency;
+    } catch(e) {
+      showAlert('Invalid token selection.', 'warning');
       return;
     }
 
@@ -6050,13 +6177,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const tx = item.tx || item.transaction || {};
         const meta = item.meta || item.metaData || {};
         if (tx.TransactionType === 'Payment' && tx.Destination === vault && meta.TransactionResult === 'tesSUCCESS') {
-          // Check if it is the correct IOU token (CHILLGUY)
           const amt = tx.Amount;
-          if (amt && typeof amt === 'object' && amt.currency === '4348494c4c475559000000000000000000000000' && amt.issuer === 'rMxouZkuiKo7BYd3nnzhW4g5tZpJwVnGry') {
-            const sender = tx.Account;
-            const value = parseFloat(amt.value) || 0;
-            if (value > 0) {
-              deposits[sender] = (deposits[sender] || 0) + value;
+          if (amt && typeof amt === 'object') {
+            const txCurrencyHex = formatCurrencyCode(amt.currency);
+            if (txCurrencyHex === currencyHex && amt.issuer === issuerAddress) {
+              const sender = tx.Account;
+              const value = parseFloat(amt.value) || 0;
+              if (value > 0) {
+                deposits[sender] = (deposits[sender] || 0) + value;
+              }
             }
           }
         }
@@ -6067,8 +6196,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       crowdhdlLeaderboardBody.innerHTML = '';
       if (sorted.length === 0) {
-        crowdhdlLeaderboardBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-4">No deposits found for $CHILLGUY on this account.</td></tr>';
-        crowdhdlTotalLocked.textContent = '0 CHILLGUY';
+        crowdhdlLeaderboardBody.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-4">No deposits found for $${readableSymbol} on this account.</td></tr>`;
+        crowdhdlTotalLocked.textContent = `0 ${readableSymbol}`;
         crowdhdlDepositorsCount.textContent = '0 Depositors';
       } else {
         let total = 0;
@@ -6078,14 +6207,14 @@ document.addEventListener('DOMContentLoaded', () => {
           tr.innerHTML = `
             <td><strong>#${idx + 1}</strong></td>
             <td class="font-monospace">${shortenAddress(d.addr)}</td>
-            <td class="fw-bold text-success">${d.val.toLocaleString()} CHILLGUY</td>
+            <td class="fw-bold text-success">${d.val.toLocaleString()} ${readableSymbol}</td>
           `;
           crowdhdlLeaderboardBody.appendChild(tr);
         });
-        crowdhdlTotalLocked.textContent = `${total.toLocaleString()} CHILLGUY`;
+        crowdhdlTotalLocked.textContent = `${total.toLocaleString()} ${readableSymbol}`;
         crowdhdlDepositorsCount.textContent = `${sorted.length} Depositors`;
 
-        // Check if current connected user is one of the admins / or show the release panel
+        // Show the release panel
         crowdhdlAdminPanel.classList.remove('d-none');
       }
 
@@ -6100,6 +6229,7 @@ document.addEventListener('DOMContentLoaded', () => {
   btnCrowdhdlDeposit.addEventListener('click', async () => {
     const vault = crowdhdlVaultAddress.value.trim();
     const amount = parseFloat(crowdhdlDepositAmount.value);
+    const tokenVal = document.getElementById('crowdhdlTokenSelect').value;
     
     if (!vault) {
       showAlert('Vault address is required.', 'warning');
@@ -6107,6 +6237,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (!amount || amount <= 0) {
       showAlert('Please enter an amount to deposit.', 'warning');
+      return;
+    }
+    if (!tokenVal) {
+      showAlert('Please select a token to deposit.', 'warning');
+      return;
+    }
+
+    let currencyHex = '';
+    let issuerAddress = '';
+    try {
+      const parsed = JSON.parse(tokenVal);
+      currencyHex = formatCurrencyCode(parsed.currency);
+      issuerAddress = parsed.issuer;
+    } catch(e) {
+      showAlert('Invalid token selection.', 'warning');
       return;
     }
 
@@ -6121,8 +6266,8 @@ document.addEventListener('DOMContentLoaded', () => {
           Account: window.connectedAccount || '',
           Destination: vault,
           Amount: {
-            currency: '4348494c4c475559000000000000000000000000',
-            issuer: 'rMxouZkuiKo7BYd3nnzhW4g5tZpJwVnGry',
+            currency: currencyHex,
+            issuer: issuerAddress,
             value: amount.toString()
           }
         }
@@ -6206,6 +6351,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const vault = crowdhdlVaultAddress.value.trim();
     const adminSignersStr = crowdhdlAdminSigners.value.trim();
     const timeVal = crowdhdlReleaseTime.value;
+    const tokenVal = document.getElementById('crowdhdlTokenSelect').value;
 
     if (!vault) {
       showAlert('Vault address is required.', 'warning');
@@ -6217,6 +6363,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (!timeVal) {
       showAlert('Please select the release date and time lock.', 'warning');
+      return;
+    }
+    if (!tokenVal) {
+      showAlert('Please select the token.', 'warning');
+      return;
+    }
+
+    let currencyHex = '';
+    let issuerAddress = '';
+    try {
+      const parsed = JSON.parse(tokenVal);
+      currencyHex = formatCurrencyCode(parsed.currency);
+      issuerAddress = parsed.issuer;
+    } catch(e) {
+      showAlert('Invalid token selection.', 'warning');
       return;
     }
 
@@ -6241,11 +6402,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const meta = item.meta || item.metaData || {};
         if (tx.TransactionType === 'Payment' && tx.Destination === vault && meta.TransactionResult === 'tesSUCCESS') {
           const amt = tx.Amount;
-          if (amt && typeof amt === 'object' && amt.currency === '4348494c4c475559000000000000000000000000' && amt.issuer === 'rMxouZkuiKo7BYd3nnzhW4g5tZpJwVnGry') {
-            const sender = tx.Account;
-            const value = parseFloat(amt.value) || 0;
-            if (value > 0) {
-              deposits[sender] = (deposits[sender] || 0) + value;
+          if (amt && typeof amt === 'object') {
+            const txCurrencyHex = formatCurrencyCode(amt.currency);
+            if (txCurrencyHex === currencyHex && amt.issuer === issuerAddress) {
+              const sender = tx.Account;
+              const value = parseFloat(amt.value) || 0;
+              if (value > 0) {
+                deposits[sender] = (deposits[sender] || 0) + value;
+              }
             }
           }
         }
@@ -6259,8 +6423,8 @@ document.addEventListener('DOMContentLoaded', () => {
           Account: vault,
           Destination: addr,
           Amount: {
-            currency: '4348494c4c475559000000000000000000000000',
-            issuer: 'rMxouZkuiKo7BYd3nnzhW4g5tZpJwVnGry',
+            currency: currencyHex,
+            issuer: issuerAddress,
             value: val.toString()
           }
         });
