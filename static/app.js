@@ -152,13 +152,24 @@ function populateTrustlinesDropdown(selectEl, curInput, issInput) {
 
   trustlines.forEach(tl => {
     const opt = document.createElement('option');
-    opt.value = JSON.stringify({ currency: tl.decoded_currency || tl.currency, issuer: tl.issuer });
+    opt.value = JSON.stringify({ currency: tl.currency, issuer: tl.issuer });
     
-    const displayName = tl.name && tl.name !== tl.decoded_currency ? 
-      `${tl.name} (${tl.decoded_currency})` : 
-      tl.decoded_currency;
+    const currency = tl.currency;
+    const decodedVal = decodeCurrencyCode(currency);
+    const balanceFormatted = parseFloat(tl.balance).toLocaleString(undefined, {maximumFractionDigits: 6});
+    const limitFormatted = parseFloat(tl.limit).toLocaleString(undefined, {maximumFractionDigits: 6});
     
-    opt.textContent = `${displayName} (Balance: ${parseFloat(tl.balance).toLocaleString(undefined, {maximumFractionDigits: 6})} • Limit: ${parseFloat(tl.limit).toLocaleString(undefined, {maximumFractionDigits: 6})})`;
+    if (currency.startsWith('03') && currency.length === 40) {
+      opt.textContent = `AMM Liquidity Pool Token (LP) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
+    } else {
+      const hasDecodedName = decodedVal !== currency;
+      if (!hasDecodedName) {
+        opt.textContent = `${currency} (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
+      } else {
+        const tokenName = tl.name && tl.name !== decodedVal ? tl.name : decodedVal;
+        opt.textContent = `${tokenName} (${decodedVal}) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
+      }
+    }
     selectEl.appendChild(opt);
   });
 
@@ -249,20 +260,22 @@ function populateMemeTokenSelect() {
     const opt = document.createElement('option');
     opt.value = JSON.stringify({ currency: tl.currency, decoded_currency: tl.decoded_currency, issuer: tl.issuer });
     
+    const currency = tl.currency;
+    const decodedVal = decodeCurrencyCode(currency);
     const balanceFormatted = parseFloat(tl.balance).toLocaleString(undefined, {maximumFractionDigits: 6});
     const limitFormatted = parseFloat(tl.limit).toLocaleString(undefined, {maximumFractionDigits: 6});
     
-    // Check if the currency code is raw 40-char hex
-    const isRawHex = tl.currency.length === 40 && !/^[A-Za-z0-9_]{3}$/.test(tl.decoded_currency);
-    
-    if (isRawHex) {
-      opt.textContent = `${tl.currency} (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
+    if (currency.startsWith('03') && currency.length === 40) {
+      opt.textContent = `AMM Liquidity Pool Token (LP) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
     } else {
-      const tokenName = tl.name || tl.decoded_currency;
-      const ticker = tl.decoded_currency || tl.currency;
-      opt.textContent = `${tokenName} (${ticker}) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
+      const hasDecodedName = decodedVal !== currency;
+      if (!hasDecodedName) {
+        opt.textContent = `${currency} (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
+      } else {
+        const tokenName = tl.name && tl.name !== decodedVal ? tl.name : decodedVal;
+        opt.textContent = `${tokenName} (${decodedVal}) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
+      }
     }
-    
     selectEl.appendChild(opt);
   });
 
