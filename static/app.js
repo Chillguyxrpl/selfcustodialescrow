@@ -6551,11 +6551,25 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    if (window.activeMemeLocks.length === 0) {
+    const activeTab = document.getElementById('memeFilterHistory')?.checked ? 'history' : 'active';
+    let filteredLocks = [];
+    if (activeTab === 'active') {
+      filteredLocks = window.activeMemeLocks.filter(lock => {
+        const balance = lock.currentBalance !== undefined ? lock.currentBalance : lock.amount;
+        return balance > 0;
+      });
+    } else {
+      filteredLocks = window.activeMemeLocks.filter(lock => {
+        const balance = lock.currentBalance !== undefined ? lock.currentBalance : lock.amount;
+        return balance <= 0;
+      });
+    }
+
+    if (filteredLocks.length === 0) {
       tbody.innerHTML = `
         <tr>
           <td colspan="6" class="text-center text-muted py-4">
-            <i class="bi bi-shield-lock me-1"></i> No active lockups found. Create a meme lockup above to start tracking!
+            <i class="bi bi-shield-lock me-1"></i> No ${activeTab} lockups found.
           </td>
         </tr>
       `;
@@ -6563,7 +6577,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     tbody.innerHTML = '';
-    window.activeMemeLocks.forEach(lock => {
+    filteredLocks.forEach(lock => {
       const tr = document.createElement('tr');
       tr.id = `lock-row-${lock.vault}-${lock.currency}`;
       
@@ -6598,6 +6612,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const tbody = document.getElementById('memeDashboardBody');
     if (!tbody || !window.activeMemeLocks || window.activeMemeLocks.length === 0) return;
 
+    const activeTab = document.getElementById('memeFilterHistory')?.checked ? 'history' : 'active';
     const nowUnix = Math.floor(Date.now() / 1000);
 
     window.activeMemeLocks.forEach(lock => {
@@ -6610,6 +6625,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const releaseUnix = Math.floor(new Date(lock.releaseTime).getTime() / 1000);
       const balance = lock.currentBalance !== undefined ? lock.currentBalance : lock.amount;
+
+      if (activeTab === 'history') {
+        countdownEl.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-circle-fill"></i> Sweep Complete</span>';
+        if (actionEl) {
+          actionEl.innerHTML = `
+            <span class="badge bg-success text-white fw-bold px-2 py-1"><i class="bi bi-check-lg"></i> Swept</span>
+            <button class="btn btn-outline-danger btn-xs lock-delete-btn ms-2" data-vault="${lock.vault}" data-currency="${lock.currency}">
+              <i class="bi bi-trash"></i>
+            </button>
+          `;
+        }
+        return;
+      }
 
       if (balance <= 0) {
         countdownEl.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-circle-fill"></i> Sweep Complete</span>';
@@ -6698,6 +6726,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (memeDashboardCountdownInterval) clearInterval(memeDashboardCountdownInterval);
     memeDashboardCountdownInterval = setInterval(window.updateMemeDashboardCountdowns, 1000);
+
+    // Setup active/history filter toggles
+    const activeRadio = document.getElementById('memeFilterActive');
+    const historyRadio = document.getElementById('memeFilterHistory');
+    if (activeRadio && !activeRadio.dataset.listenerAdded) {
+      activeRadio.dataset.listenerAdded = 'true';
+      activeRadio.addEventListener('change', () => {
+        window.renderMemeDashboardTable();
+      });
+    }
+    if (historyRadio && !historyRadio.dataset.listenerAdded) {
+      historyRadio.dataset.listenerAdded = 'true';
+      historyRadio.addEventListener('change', () => {
+        window.renderMemeDashboardTable();
+      });
+    }
 
     // Setup click listeners
     const btnRefresh = document.getElementById('btnRefreshMemeDashboard');
