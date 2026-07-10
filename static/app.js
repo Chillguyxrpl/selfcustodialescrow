@@ -6612,7 +6612,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const balance = lock.currentBalance !== undefined ? lock.currentBalance : lock.amount;
 
       if (balance <= 0) {
-        countdownEl.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-circle-fill"></i> Released</span>';
+        countdownEl.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-circle-fill"></i> Sweep Complete</span>';
         if (actionEl) {
           actionEl.innerHTML = `
             <button class="btn btn-outline-danger btn-xs lock-delete-btn" data-vault="${lock.vault}" data-currency="${lock.currency}">
@@ -6624,11 +6624,14 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (nowUnix >= releaseUnix) {
-        countdownEl.innerHTML = '<span class="badge bg-warning-subtle text-warning border border-warning-subtle animate-pulse"><i class="bi bi-unlock-fill"></i> Ready to Claim</span>';
+        countdownEl.innerHTML = '<span class="badge bg-warning-subtle text-warning border border-warning-subtle animate-pulse"><i class="bi bi-unlock-fill"></i> Ready to Sweep</span>';
         if (actionEl) {
           actionEl.innerHTML = `
             <button class="btn btn-success btn-xs fw-bold lock-claim-btn" data-vault="${lock.vault}" data-currency="${lock.currency}" data-issuer="${lock.issuer}" data-recipient="${lock.recipient}">
-              <i class="bi bi-box-arrow-right"></i> Claim
+              <i class="bi bi-box-arrow-right"></i> Sweep
+            </button>
+            <button class="btn btn-outline-info btn-xs lock-monitor-btn ms-1" data-vault="${lock.vault}" data-currency="${lock.currency}" data-issuer="${lock.issuer}" data-recipient="${lock.recipient}" data-release="${lock.releaseTime}">
+              <i class="bi bi-eye"></i> Monitor
             </button>
           `;
         }
@@ -6641,7 +6644,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let timeStr = '';
         if (days > 0) {
-          timeStr = `${days}d ${hours}h remaining`;
+          timeStr = `${days}d ${hours}h ${minutes}m ${seconds}s remaining`;
         } else {
           timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')} remaining`;
         }
