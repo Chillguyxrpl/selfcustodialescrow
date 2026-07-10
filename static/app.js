@@ -1,13 +1,12 @@
 window.escrowViewType = localStorage.getItem('escrowViewType') || 'grid';
 
 // --- Theme Toggle ---
-function initThemeToggle() {
-  const storedTheme = localStorage.getItem('theme');
-  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  let currentTheme = storedTheme || (prefersDark ? 'dark' : 'light');
+const storedTheme = localStorage.getItem('theme');
+const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+let currentTheme = storedTheme || (prefersDark ? 'dark' : 'light');
+document.documentElement.setAttribute('data-bs-theme', currentTheme);
 
-  document.documentElement.setAttribute('data-bs-theme', currentTheme);
-
+document.addEventListener('DOMContentLoaded', () => {
   const toggleBtn = document.getElementById('themeToggleBtn');
   if (toggleBtn) {
     toggleBtn.innerHTML = currentTheme === 'dark' ? '<i class="bi bi-sun-fill"></i> Theme' : '<i class="bi bi-moon-stars-fill"></i> Theme';
@@ -19,8 +18,7 @@ function initThemeToggle() {
       toggleBtn.innerHTML = currentTheme === 'dark' ? '<i class="bi bi-sun-fill"></i> Theme' : '<i class="bi bi-moon-stars-fill"></i> Theme';
     });
   }
-}
-initThemeToggle();
+});
 
 // Cache frequently-used DOM elements to reduce lookups
 const templateSelectEl = document.getElementById('templateSelect');
