@@ -191,6 +191,86 @@ function updateFormTrustlinesDropdowns() {
       populateTrustlinesDropdown(selectEl, curInput, issInput);
     }
   });
+  populateMemeTokenSelect();
+}
+
+function populateMemeTokenSelect() {
+  const selectEl = document.getElementById('memeTokenSelect');
+  if (!selectEl) return;
+  selectEl.innerHTML = '';
+  selectEl.disabled = false;
+
+  const btnSearch = document.getElementById('btnMemeTokenSearch');
+  if (btnSearch) btnSearch.style.display = 'none';
+
+  // If no wallet connected
+  if (!window.connectedAccount) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '❌ Connect wallet to view trustlines';
+    selectEl.appendChild(opt);
+    selectEl.disabled = true;
+    return;
+  }
+
+  // If currently loading
+  if (window.loadingTrustlines) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '⏳ Loading trustlines from ledger...';
+    selectEl.appendChild(opt);
+    selectEl.disabled = true;
+    return;
+  }
+
+  const trustlines = window.userTrustlines || [];
+  if (trustlines.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '❌ No active trustlines found for this account';
+    selectEl.appendChild(opt);
+    
+    // Still allow custom token search even if they have no trustlines
+    const customOpt = document.createElement('option');
+    customOpt.value = 'custom';
+    customOpt.textContent = '-- Custom Token Search --';
+    selectEl.appendChild(customOpt);
+    selectEl.disabled = false;
+    return;
+  }
+
+  // Add default option
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Select a token from your trustlines...';
+  selectEl.appendChild(placeholder);
+
+  trustlines.forEach(tl => {
+    const opt = document.createElement('option');
+    opt.value = JSON.stringify({ currency: tl.currency, decoded_currency: tl.decoded_currency, issuer: tl.issuer });
+    
+    const balanceFormatted = parseFloat(tl.balance).toLocaleString(undefined, {maximumFractionDigits: 6});
+    const limitFormatted = parseFloat(tl.limit).toLocaleString(undefined, {maximumFractionDigits: 6});
+    
+    // Check if the currency code is raw 40-char hex
+    const isRawHex = tl.currency.length === 40 && !/^[A-Za-z0-9_]{3}$/.test(tl.decoded_currency);
+    
+    if (isRawHex) {
+      opt.textContent = `${tl.currency} (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
+    } else {
+      const tokenName = tl.name || tl.decoded_currency;
+      const ticker = tl.decoded_currency || tl.currency;
+      opt.textContent = `${tokenName} (${ticker}) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
+    }
+    
+    selectEl.appendChild(opt);
+  });
+
+  // Add custom search option at the end
+  const customOpt = document.createElement('option');
+  customOpt.value = 'custom';
+  customOpt.textContent = '-- Custom Token Search --';
+  selectEl.appendChild(customOpt);
 }
 
 function updateSelectedTokenBadge(tokenGroup, name, domain, icon) {
@@ -3494,6 +3574,7 @@ if (window.connectedAccount) {
   fetchUserTrustlines(window.connectedAccount);
 } else {
   updateDashboard(null);
+  fetchUserTrustlines(null);
 }
 
 // No wallet address input is shown; user fills required ACCOUNT fields in the selected escrow.
@@ -5314,14 +5395,16 @@ document.addEventListener('DOMContentLoaded', () => {
           value: '',
           set value(v) {
             memeTokenHex.value = formatCurrencyCode(v);
-            let opt = memeTokenSelect.querySelector('option[value="' + v + '"]');
+            let opt = memeTokenSelect.querySelector(`option[data-currency="${v}"]`);
             if (!opt) {
               opt = document.createElement('option');
-              opt.value = v;
+              opt.dataset.currency = v;
+              opt.value = JSON.stringify({ currency: v, decoded_currency: v, issuer: '' });
               opt.textContent = `${v} (Custom)`;
               memeTokenSelect.insertBefore(opt, memeTokenSelect.lastElementChild);
             }
-            memeTokenSelect.value = v;
+            memeTokenSelect.value = opt.value;
+            memeTokenSelect.dispatchEvent(new Event('change'));
           },
           dispatchEvent(e) {}
         },
@@ -5329,21 +5412,37 @@ document.addEventListener('DOMContentLoaded', () => {
           value: '',
           set value(v) {
             memeTokenIssuer.value = v;
-            const opt = memeTokenSelect.querySelector('option[value="' + memeTokenSelect.value + '"]');
-            if (opt) opt.setAttribute('data-issuer', v);
+            const currentVal = memeTokenSelect.value;
+            if (currentVal && currentVal.startsWith('{')) {
+              try {
+                const parsed = JSON.parse(currentVal);
+                parsed.issuer = v;
+                const newOptVal = JSON.stringify(parsed);
+                const opt = memeTokenSelect.querySelector(`option[value="${currentVal}"]`);
+                if (opt) {
+                  opt.value = newOptVal;
+                  opt.setAttribute('data-issuer', v);
+                  memeTokenSelect.value = newOptVal;
+                }
+              } catch(e){}
+            }
           },
           dispatchEvent(e) {}
         }
       };
       // Trigger search modal
       btnMemeTokenSearch.click();
+    } else if (val && val.startsWith('{')) {
+      btnMemeTokenSearch.style.display = 'none';
+      try {
+        const { currency, issuer } = JSON.parse(val);
+        memeTokenIssuer.value = issuer;
+        memeTokenHex.value = formatCurrencyCode(currency);
+      } catch (e) {
+        console.error('Error parsing selected meme token:', e);
+      }
     } else {
       btnMemeTokenSearch.style.display = 'none';
-      const opt = memeTokenSelect.querySelector(`option[value="${val}"]`);
-      if (opt) {
-        memeTokenIssuer.value = opt.getAttribute('data-issuer') || '';
-        memeTokenHex.value = opt.getAttribute('data-hex') || '';
-      }
     }
   });
 
