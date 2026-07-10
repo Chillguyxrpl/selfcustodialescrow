@@ -3770,13 +3770,7 @@ function updateXamanUI(account) {
   }
 }
 
-if (window.connectedAccount) {
-  updateXamanUI(window.connectedAccount);
-  fetchUserTrustlines(window.connectedAccount);
-} else {
-  updateDashboard(null);
-  fetchUserTrustlines(null);
-}
+// Session check moved to DOMContentLoaded listener to avoid hoisting errors
 
 // No wallet address input is shown; user fills required ACCOUNT fields in the selected escrow.
 
@@ -5140,6 +5134,14 @@ document.addEventListener('DOMContentLoaded', () => {
   initWelcomeTour();
   startLiveCountdownTimer();
   initMemeDashboard();
+  
+  if (window.connectedAccount) {
+    updateXamanUI(window.connectedAccount);
+    fetchUserTrustlines(window.connectedAccount);
+  } else {
+    updateDashboard(null);
+    fetchUserTrustlines(null);
+  }
   
   const btnRefreshDashboard = document.getElementById('btnRefreshDashboardEscrows');
   if (btnRefreshDashboard) {
