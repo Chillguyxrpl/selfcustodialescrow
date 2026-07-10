@@ -5068,6 +5068,28 @@ if (startVaultBtnEl) {
     logVault(`Vault Account Initialized: ${wallet.address}`);
     logVault(`Target Release Time: ${new Date(releaseUnix * 1000).toLocaleString()}`);
 
+    // Immediate pre-validation of the vault account and trustline
+    logVault('Verifying vault account and trustline on-chain...');
+    try {
+      const accountLinesReq = await vaultClient.request({ command: 'account_lines', account: wallet.address, peer: issuer });
+      const trustline = accountLinesReq.result.lines.find(l => l.currency === currency || l.currency === formattedCurrency);
+
+      if (!trustline) {
+        logVault(`❌ [ERROR] Trustline for ${currency} not found on the vault account.`);
+        stopVault();
+        return;
+      }
+      logVault(`✅ Trustline verified (Current Balance: ${trustline.balance})`);
+    } catch (err) {
+      if (err.data && err.data.error === 'actNotFound') {
+        logVault(`❌ [ERROR] Vault account ${wallet.address} not found/funded on the ledger.`);
+      } else {
+        logVault(`❌ [ERROR] Failed to verify trustline: ${err.message || err}`);
+      }
+      stopVault();
+      return;
+    }
+
     const checkTime = async () => {
       if (!vaultClient.isConnected()) {
         logVault('Reconnecting to node...');
