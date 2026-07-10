@@ -1217,6 +1217,41 @@
                     </div>
                   </div>
                 </div>
+
+                <!-- Real-Time Meme Lockup Dashboard -->
+                <div class="card border border-primary-subtle shadow-sm mt-4">
+                  <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold">
+                      <i class="bi bi-speedometer2 text-warning me-2 animate-pulse"></i> Active Meme Lockups Dashboard
+                    </h6>
+                    <button class="btn btn-xs btn-outline-warning" id="btnRefreshMemeDashboard">
+                      <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                  </div>
+                  <div class="card-body p-0">
+                    <div class="table-responsive">
+                      <table class="table table-dark table-striped table-hover mb-0" style="font-size: 0.85rem;">
+                        <thead>
+                          <tr>
+                            <th>Token</th>
+                            <th>Amount</th>
+                            <th>Vault / Pool Address</th>
+                            <th>Unlock Date</th>
+                            <th>Time Remaining</th>
+                            <th class="text-end">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody id="memeDashboardBody">
+                          <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                              <i class="bi bi-info-circle me-1"></i> Connect wallet to view your active locks.
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <!-- Sub-pane 2: Crowd-HODL Manager -->

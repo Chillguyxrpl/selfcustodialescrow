@@ -3713,6 +3713,7 @@ function updateXamanUI(account) {
       disconnectBtn.remove();
       updateDashboard(null);
       updateFormTrustlinesDropdowns();
+      initMemeDashboard();
     });
     const copyBtnNode = document.getElementById('copyAddressBtn');
     connectXamanBtnEl.parentNode.insertBefore(disconnectBtn, copyBtnNode.nextSibling);
@@ -3854,6 +3855,7 @@ function startSignInPolling(uuid, originalHtml) {
             showAlert(`Successfully connected: ${account}`, 'success');
             
             updateXamanUI(account);
+            initMemeDashboard();
             loadSignatureHistory();
             
             // Auto-fill active escrow viewer if empty and trigger a scan
@@ -5125,6 +5127,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initSortToggle();
   initWelcomeTour();
   startLiveCountdownTimer();
+  initMemeDashboard();
   
   const btnRefreshDashboard = document.getElementById('btnRefreshDashboardEscrows');
   if (btnRefreshDashboard) {
@@ -6004,6 +6007,19 @@ document.addEventListener('DOMContentLoaded', () => {
         // Show secure sign modal
         showSubmittedModal(payload);
 
+        // Save to Local Storage Dashboard
+        const newLock = {
+          vault: vault,
+          recipient: recipient,
+          currency: currency,
+          issuer: issuer,
+          amount: amount,
+          releaseTime: memeLockReleaseTime.value,
+          owner: window.connectedAccount,
+          network: window.activeNetwork || 'mainnet'
+        };
+        window.saveMemeLockToStorage(newLock);
+
         // Fill Vault inputs so they can monitor
         document.getElementById('vaultAccountAddress').value = vault;
         document.getElementById('vaultDestination').value = recipient;
@@ -6443,4 +6459,323 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!addr) return '';
     return addr.slice(0, 6) + '...' + addr.slice(-6);
   }
+
+  // --- Real-Time Meme Lockup Dashboard controller ---
+  window.activeMemeLocks = [];
+  let memeDashboardCountdownInterval = null;
+  let memeDashboardBodyDelegated = false;
+
+  window.loadMemeLocksFromStorage = function() {
+    if (!window.connectedAccount) {
+      window.activeMemeLocks = [];
+      return;
+    }
+    const raw = localStorage.getItem('local_meme_vault_locks');
+    let locks = [];
+    if (raw) {
+      try {
+        locks = JSON.parse(raw);
+      } catch(e) {
+        locks = [];
+      }
+    }
+    window.activeMemeLocks = locks.filter(l => l.owner === window.connectedAccount);
+  };
+
+  window.saveMemeLockToStorage = function(lock) {
+    const raw = localStorage.getItem('local_meme_vault_locks');
+    let locks = [];
+    if (raw) {
+      try {
+        locks = JSON.parse(raw);
+      } catch(e) {
+        locks = [];
+      }
+    }
+    locks.push(lock);
+    localStorage.setItem('local_meme_vault_locks', JSON.stringify(locks));
+    window.loadMemeLocksFromStorage();
+    window.renderMemeDashboardTable();
+    window.refreshMemeDashboardBalances();
+  };
+
+  window.renderMemeDashboardTable = function() {
+    const tbody = document.getElementById('memeDashboardBody');
+    if (!tbody) return;
+
+    if (!window.connectedAccount) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" class="text-center text-muted py-4">
+            <i class="bi bi-info-circle me-1"></i> Connect wallet to view your active locks.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    if (window.activeMemeLocks.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" class="text-center text-muted py-4">
+            <i class="bi bi-shield-lock me-1"></i> No active lockups found. Create a meme lockup above to start tracking!
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = '';
+    window.activeMemeLocks.forEach(lock => {
+      const tr = document.createElement('tr');
+      tr.id = `lock-row-${lock.vault}-${lock.currency}`;
+      
+      const readableCurrency = decodeCurrencyCode(lock.currency);
+      const balance = lock.currentBalance !== undefined ? lock.currentBalance : lock.amount;
+
+      tr.innerHTML = `
+        <td class="align-middle">
+          <span class="fw-bold text-warning">${escapeHtml(readableCurrency)}</span>
+        </td>
+        <td class="align-middle font-monospace fw-semibold">${balance.toLocaleString()}</td>
+        <td class="align-middle">
+          <a href="https://xrpl.org/account/${lock.vault}" target="_blank" class="font-monospace text-primary text-decoration-none small text-truncate d-inline-block" style="max-width: 140px;" title="${lock.vault}">
+            ${lock.vault}
+          </a>
+        </td>
+        <td class="align-middle text-secondary small">${new Date(lock.releaseTime).toLocaleString()}</td>
+        <td class="align-middle lock-countdown">
+          <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">⏳ Loading...</span>
+        </td>
+        <td class="align-middle text-end lock-action-cell">
+          <span class="spinner-border spinner-border-sm text-secondary" role="status"></span>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    window.updateMemeDashboardCountdowns();
+  };
+
+  window.updateMemeDashboardCountdowns = function() {
+    const tbody = document.getElementById('memeDashboardBody');
+    if (!tbody || !window.activeMemeLocks || window.activeMemeLocks.length === 0) return;
+
+    const nowUnix = Math.floor(Date.now() / 1000);
+
+    window.activeMemeLocks.forEach(lock => {
+      const rowEl = document.getElementById(`lock-row-${lock.vault}-${lock.currency}`);
+      if (!rowEl) return;
+
+      const countdownEl = rowEl.querySelector('.lock-countdown');
+      const actionEl = rowEl.querySelector('.lock-action-cell');
+      if (!countdownEl) return;
+
+      const releaseUnix = Math.floor(new Date(lock.releaseTime).getTime() / 1000);
+      const balance = lock.currentBalance !== undefined ? lock.currentBalance : lock.amount;
+
+      if (balance <= 0) {
+        countdownEl.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-circle-fill"></i> Released</span>';
+        if (actionEl) {
+          actionEl.innerHTML = `
+            <button class="btn btn-outline-danger btn-xs lock-delete-btn" data-vault="${lock.vault}" data-currency="${lock.currency}">
+              <i class="bi bi-trash"></i> Remove
+            </button>
+          `;
+        }
+        return;
+      }
+
+      if (nowUnix >= releaseUnix) {
+        countdownEl.innerHTML = '<span class="badge bg-warning-subtle text-warning border border-warning-subtle animate-pulse"><i class="bi bi-unlock-fill"></i> Ready to Claim</span>';
+        if (actionEl) {
+          actionEl.innerHTML = `
+            <button class="btn btn-success btn-xs fw-bold lock-claim-btn" data-vault="${lock.vault}" data-currency="${lock.currency}" data-issuer="${lock.issuer}" data-recipient="${lock.recipient}">
+              <i class="bi bi-box-arrow-right"></i> Claim
+            </button>
+          `;
+        }
+      } else {
+        const diff = releaseUnix - nowUnix;
+        const days = Math.floor(diff / 86400);
+        const hours = Math.floor((diff % 86400) / 3600);
+        const minutes = Math.floor((diff % 3600) / 60);
+        const seconds = diff % 60;
+
+        let timeStr = '';
+        if (days > 0) {
+          timeStr = `${days}d ${hours}h remaining`;
+        } else {
+          timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')} remaining`;
+        }
+        countdownEl.innerHTML = `<span class="badge bg-info-subtle text-info border border-info-subtle font-monospace">${timeStr}</span>`;
+        
+        if (actionEl) {
+          actionEl.innerHTML = `
+            <button class="btn btn-outline-info btn-xs lock-monitor-btn" data-vault="${lock.vault}" data-currency="${lock.currency}" data-issuer="${lock.issuer}" data-recipient="${lock.recipient}" data-release="${lock.releaseTime}">
+              <i class="bi bi-eye"></i> Monitor
+            </button>
+          `;
+        }
+      }
+    });
+  };
+
+  window.refreshMemeDashboardBalances = async function() {
+    if (!window.connectedAccount) return;
+    const rpc = document.getElementById('vaultRpc').value.trim() || 'https://s1.ripple.com:51234/';
+    const tempClient = new xrpl.Client(rpc);
+    try {
+      await tempClient.connect();
+      for (let lock of window.activeMemeLocks) {
+        try {
+          const lines = await tempClient.request({ command: 'account_lines', account: lock.vault, peer: lock.issuer });
+          const trustline = lines.result.lines.find(l => l.currency === lock.currency || l.currency === formatCurrencyCode(lock.currency));
+          if (trustline) {
+            lock.currentBalance = parseFloat(trustline.balance);
+          } else {
+            lock.currentBalance = 0;
+          }
+        } catch (e) {
+          console.error(`Failed to fetch lines for vault ${lock.vault}:`, e);
+          lock.currentBalance = 0;
+        }
+      }
+      window.renderMemeDashboardTable();
+    } catch (err) {
+      console.error('Error refreshing dashboard balances:', err);
+    } finally {
+      if (tempClient.isConnected()) {
+        await tempClient.disconnect();
+      }
+    }
+  };
+
+  window.initMemeDashboard = function() {
+    window.loadMemeLocksFromStorage();
+    window.renderMemeDashboardTable();
+    window.refreshMemeDashboardBalances();
+
+    if (memeDashboardCountdownInterval) clearInterval(memeDashboardCountdownInterval);
+    memeDashboardCountdownInterval = setInterval(window.updateMemeDashboardCountdowns, 1000);
+
+    // Setup click listeners
+    const btnRefresh = document.getElementById('btnRefreshMemeDashboard');
+    if (btnRefresh && !btnRefresh.dataset.listenerAdded) {
+      btnRefresh.dataset.listenerAdded = 'true';
+      btnRefresh.addEventListener('click', (e) => {
+        e.preventDefault();
+        btnRefresh.innerHTML = '<i class="bi bi-arrow-clockwise animate-spin"></i> Refreshing...';
+        btnRefresh.setAttribute('disabled', 'true');
+        
+        window.refreshMemeDashboardBalances().then(() => {
+          btnRefresh.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Refresh';
+          btnRefresh.removeAttribute('disabled');
+        });
+      });
+    }
+
+    const memeDashboardBody = document.getElementById('memeDashboardBody');
+    if (memeDashboardBody && !memeDashboardBodyDelegated) {
+      memeDashboardBodyDelegated = true;
+      memeDashboardBody.addEventListener('click', async (e) => {
+        // 1. Claim Click
+        const claimBtn = e.target.closest('.lock-claim-btn');
+        if (claimBtn) {
+          const vault = claimBtn.getAttribute('data-vault');
+          const currency = claimBtn.getAttribute('data-currency');
+          const issuer = claimBtn.getAttribute('data-issuer');
+          const recipient = claimBtn.getAttribute('data-recipient');
+
+          claimBtn.setAttribute('disabled', 'true');
+          claimBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Claiming...';
+
+          try {
+            const rpc = document.getElementById('vaultRpc').value.trim() || 'https://s1.ripple.com:51234/';
+            const tempClient = new xrpl.Client(rpc);
+            await tempClient.connect();
+            const lines = await tempClient.request({ command: 'account_lines', account: vault, peer: issuer });
+            const trustline = lines.result.lines.find(l => l.currency === currency || l.currency === formatCurrencyCode(currency));
+            const balance = trustline ? trustline.balance : '0';
+            await tempClient.disconnect();
+
+            if (parseFloat(balance) <= 0) {
+              showAlert('Vault balance is 0 or empty.', 'warning');
+              claimBtn.removeAttribute('disabled');
+              claimBtn.innerHTML = '<i class="bi bi-box-arrow-right"></i> Claim';
+              return;
+            }
+
+            const paymentTx = {
+              TransactionType: 'Payment',
+              Account: vault,
+              Destination: recipient,
+              Amount: {
+                currency: formatCurrencyCode(currency),
+                issuer: issuer,
+                value: balance
+              }
+            };
+
+            const resp = await fetch('/xumm/payload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ txjson: paymentTx })
+            });
+            if (!resp.ok) throw new Error(await resp.text());
+            const payload = await resp.json();
+
+            showAlert('Release payload generated. Please sign the transaction on Xaman!', 'success');
+            showSubmittedModal(payload);
+          } catch(err) {
+            showAlert(`Failed to claim: ${err.message}`, 'error');
+          } finally {
+            claimBtn.removeAttribute('disabled');
+            claimBtn.innerHTML = '<i class="bi bi-box-arrow-right"></i> Claim';
+          }
+        }
+
+        // 2. Monitor Click
+        const monitorBtn = e.target.closest('.lock-monitor-btn');
+        if (monitorBtn) {
+          const vault = monitorBtn.getAttribute('data-vault');
+          const currency = monitorBtn.getAttribute('data-currency');
+          const issuer = monitorBtn.getAttribute('data-issuer');
+          const recipient = monitorBtn.getAttribute('data-recipient');
+          const releaseTime = monitorBtn.getAttribute('data-release');
+
+          document.getElementById('vaultAccountAddress').value = vault;
+          document.getElementById('vaultDestination').value = recipient;
+          document.getElementById('vaultCurrency').value = decodeCurrencyCode(currency);
+          document.getElementById('vaultIssuer').value = issuer;
+          document.getElementById('vaultReleaseTime').value = releaseTime;
+
+          const vaultTabBtn = document.getElementById('tab-vault-btn');
+          if (vaultTabBtn) vaultTabBtn.click();
+          
+          showAlert(`Loaded Vault ${vault} into L2 Monitor. Click 'Start Vault Monitor' to run countdown.`, 'info');
+        }
+
+        // 3. Delete Click
+        const deleteBtn = e.target.closest('.lock-delete-btn');
+        if (deleteBtn) {
+          const vault = deleteBtn.getAttribute('data-vault');
+          const currency = deleteBtn.getAttribute('data-currency');
+
+          const raw = localStorage.getItem('local_meme_vault_locks');
+          if (raw) {
+            try {
+              let locks = JSON.parse(raw);
+              locks = locks.filter(l => !(l.vault === vault && l.currency === currency));
+              localStorage.setItem('local_meme_vault_locks', JSON.stringify(locks));
+            } catch(e) {}
+          }
+          
+          window.loadMemeLocksFromStorage();
+          window.renderMemeDashboardTable();
+          showAlert('Lockup removed from dashboard view.', 'success');
+        }
+      });
+    }
+  };
 });
