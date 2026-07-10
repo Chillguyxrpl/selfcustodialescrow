@@ -957,6 +957,16 @@ def search_tokens(request: Request, currency: Optional[str] = None, name: Option
     if not query_val:
         return {"tokens": []}
         
+    # If the search value is a 40-character hex string, decode it to UTF-8
+    # so we can fuzzy search s1.xrplmeta.org by its human-readable name.
+    if len(query_val) == 40:
+        try:
+            decoded = bytes.fromhex(query_val).decode("utf-8").replace("\x00", "").strip()
+            if decoded:
+                query_val = decoded
+        except Exception:
+            pass
+        
     params = {
         "name_like": query_val,
         "limit": 50
