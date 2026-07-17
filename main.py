@@ -176,12 +176,45 @@ def init_db():
     except Exception as e:
         print(f"Database initialization failed: {e}")
 
+class TokenBucketLimiter:
+    def __init__(self, capacity: int, leak_rate: float):
+        self.capacity = capacity
+        self.leak_rate = leak_rate
+        self.buckets = {}
+
+    def consume(self, ip: str, tokens: int = 1) -> bool:
+        now = time.time()
+        if ip not in self.buckets:
+            self.buckets[ip] = (self.capacity, now)
+        current_tokens, last_update = self.buckets[ip]
+        elapsed = now - last_update
+        new_tokens = min(self.capacity, current_tokens + elapsed * self.leak_rate)
+        if new_tokens >= tokens:
+            self.buckets[ip] = (new_tokens - tokens, now)
+            return True
+        self.buckets[ip] = (new_tokens, now)
+        return False
+
+payload_limiter = TokenBucketLimiter(capacity=10, leak_rate=0.2)
+submit_limiter = TokenBucketLimiter(capacity=5, leak_rate=0.1)
+
+def get_client_ip(request: Request) -> str:
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+    return request.client.host if request.client else "unknown"
+
 init_db()
 
 app = FastAPI(title="Self-Custodial Escrow (XUMM)")
 
 app.add_middleware(
     CORSMiddleware,
+    # NOTE: ALLOWED_ORIGINS must be a strict allowlist. Do NOT change to ["*"] 
+    # when allow_credentials=True, as this is insecure and disallowed by browsers.
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
@@ -194,7 +227,7 @@ async def add_security_headers(request: Request, call_next):
     # Content Security Policy restricts where resources can be loaded from, blocking inline scripts, eval, and unknown domain sources.
     csp = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js https://cdn.jsdelivr.net/npm/xrpl@2.11.0/build/xrpl-latest-min.js; "
+        "script-src 'self' https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js https://cdn.jsdelivr.net/npm/xrpl@2.11.0/build/xrpl-latest-min.js; "
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "img-src 'self' data: https:; "
         "font-src 'self' https://cdn.jsdelivr.net data:; "
@@ -554,8 +587,11 @@ def check_issuer_status(request: Request, account: str):
             return {"account": account, "escrows_enabled": escrows_enabled}
         else:
             raise HTTPException(status_code=r.status_code, detail="XRPL node account_info request failed.")
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error checking issuer status: {e}", file=sys.stderr)
+        raise HTTPException(status_code=500, detail="Internal Server Error: Failed to check issuer status.")
 
 
 @app.get("/account_info/{account}")
@@ -575,30 +611,44 @@ def get_account_info(request: Request, account: str):
             return res.get("account_data", {})
         else:
             raise HTTPException(status_code=r.status_code, detail="XRPL node account_info request failed.")
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error fetching account info: {e}", file=sys.stderr)
+        raise HTTPException(status_code=500, detail="Internal Server Error: Failed to fetch account info.")
 
 
 @app.get("/xumm/history")
 def get_payload_history(request: Request, account: str = None):
-    """Retrieve signature payload history from the local DB, optionally filtered by account."""
+    """Retrieve signature payload history from the local DB, secured and scoped by account and user-token."""
     if not POSTGRES_URL:
         return JSONResponse(content=[])
     
-    query = "SELECT uuid, response, status, created_at FROM payloads"
-    params = []
-    
-    if account:
-        account = account.strip()
-        query += " WHERE response LIKE %s"
-        params.append(f"%{account}%")
+    if not account:
+        raise HTTPException(status_code=400, detail="Missing required query parameter: account.")
         
-    query += " ORDER BY created_at DESC LIMIT 50"
+    account = account.strip()
+    if not is_valid_xrpl_address(account):
+        raise HTTPException(status_code=400, detail="Invalid account address format.")
+
+    user_token = request.headers.get("X-User-Token")
+    if not user_token:
+        raise HTTPException(status_code=401, detail="Unauthorized: Missing X-User-Token header.")
     
     try:
         with get_db_conn() as conn:
             with conn.cursor() as c:
-                c.execute(query, params)
+                # Find if any payload response links this user token to this account
+                c.execute(
+                    "SELECT 1 FROM payloads WHERE response LIKE %s AND response LIKE %s LIMIT 1",
+                    (f"%{account}%", f"%{user_token}%")
+                )
+                if not c.fetchone():
+                    raise HTTPException(status_code=403, detail="Forbidden: You do not have permission to view history for this account.")
+                
+                # Fetch history for this account
+                query = "SELECT uuid, response, status, created_at FROM payloads WHERE response LIKE %s ORDER BY created_at DESC LIMIT 50"
+                c.execute(query, (f"%{account}%",))
                 rows = c.fetchall()
                 
         history = []
@@ -615,38 +665,23 @@ def get_payload_history(request: Request, account: str = None):
                 "created_at": created_at
             })
         return JSONResponse(content=history)
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error fetching payload history: {e}", file=sys.stderr)
+        raise HTTPException(status_code=500, detail="Internal Server Error: Failed to fetch payload history.")
 
 
 def query_xrpl_node(rpc_req: dict) -> dict:
-    """Queries the primary XRPL_RPC. Falls back to the alternative network if the account is not found or request fails."""
-    # Determine fallback RPC URL based on primary XRPL_RPC config
-    is_default_testnet = "testnet" in XRPL_RPC.lower() or "altnet" in XRPL_RPC.lower()
-    alt_rpc = "https://s1.ripple.com:51234/" if is_default_testnet else "https://s.altnet.rippletest.net:51234/"
-    
-    # Try primary RPC node first
+    """Queries the primary XRPL_RPC. Treats the configured network as the single source of truth."""
     try:
-        r = session.post(XRPL_RPC, json=rpc_req, timeout=10)
+        r = session.post(XRPL_RPC, json=rpc_req, timeout=15)
         if r.status_code == 200:
-            data = r.json()
-            result = data.get("result", {})
-            if "error" not in result or result.get("error") != "actNotFound":
-                return result
-    except Exception:
-        pass
-
-    # Try fallback RPC node
-    try:
-        r_alt = session.post(alt_rpc, json=rpc_req, timeout=10)
-        if r_alt.status_code == 200:
-            data_alt = r_alt.json()
-            return data_alt.get("result", {})
-    except Exception:
-        pass
-
-    # Return actNotFound as default if it failed on both
-    return {"error": "actNotFound", "error_message": "Account not found on either network node."}
+            return r.json().get("result", {})
+        else:
+            return {"error": "rpcFailed", "error_message": f"XRPL RPC request failed with status code {r.status_code}"}
+    except Exception as e:
+        return {"error": "rpcException", "error_message": str(e)}
 
 
 @app.get("/check_trustline/{destination}/{issuer}/{currency}")
@@ -676,7 +711,7 @@ def check_trustline(request: Request, destination: str, issuer: str, currency: s
         if "error" in res:
             err = res.get("error_message", res.get("error"))
             if res.get("error") == "actNotFound":
-                err = f"Account '{destination}' not found on either network node. Fund it with at least 20 XRP first, then set up trustlines."
+                err = f"Account '{destination}' not found on the ledger. Fund it with at least 20 XRP first, then set up trustlines."
             return {"has_trustline": False, "error": err}
         
         lines = res.get("lines", [])
@@ -752,8 +787,8 @@ def get_account_trustlines(account: str):
                     meta_res["name"] = token_meta.get("name") or issuer_meta.get("name") or decoded_cur
                     meta_res["domain"] = issuer_meta.get("domain") or "Unknown source"
                     meta_res["icon"] = token_meta.get("icon") or ""
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Warning: Failed to fetch token metadata for {currency}:{issuer} from xrplmeta.org: {e}", file=sys.stderr)
                 
             return meta_res
 
@@ -763,8 +798,11 @@ def get_account_trustlines(account: str):
             enhanced_lines = list(executor.map(fetch_metadata, trustlines_to_fetch))
             
         return {"trustlines": enhanced_lines}
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch trustlines: {str(e)}")
+        print(f"Error fetching trustlines: {e}", file=sys.stderr)
+        raise HTTPException(status_code=500, detail="Internal Server Error: Failed to fetch trustlines.")
 
 
 @app.get("/active_escrows/{account}")
@@ -878,14 +916,17 @@ def get_active_escrows(request: Request, account: str):
                                 tx_data = tx_res.json().get("result", {})
                                 if tx_data.get("TransactionType") == "EscrowCreate":
                                     e["OfferSequence"] = tx_data.get("Sequence")
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            print(f"Warning: Failed to fetch OfferSequence for escrow {prev_tx}: {e}", file=sys.stderr)
 
         escrows.extend(incoming_candidates)
         return {"account": account, "escrows": escrows}
         
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error fetching active escrows: {e}", file=sys.stderr)
+        raise HTTPException(status_code=500, detail="Internal Server Error: Failed to fetch active escrows.")
 
 @app.get("/account_tx/{account}")
 def get_account_tx(request: Request, account: str, limit: Optional[int] = 400):
@@ -914,10 +955,11 @@ def get_account_tx(request: Request, account: str, limit: Optional[int] = 400):
             return res
         else:
             raise HTTPException(status_code=r.status_code, detail="XRPL node account_tx request failed.")
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error fetching account tx: {e}", file=sys.stderr)
+        raise HTTPException(status_code=500, detail="Internal Server Error: Failed to fetch account transaction history.")
 
 @app.get("/ledger_time")
 def get_ledger_time(request: Request):
@@ -936,10 +978,11 @@ def get_ledger_time(request: Request):
             return {"network_time": close_time}
         else:
             raise HTTPException(status_code=r.status_code, detail="XRPL node ledger request failed.")
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error fetching ledger time: {e}", file=sys.stderr)
+        raise HTTPException(status_code=500, detail="Internal Server Error: Failed to fetch ledger time.")
 
 @app.get("/sysinfo")
 def get_sys_info():
@@ -1004,7 +1047,8 @@ def search_tokens(request: Request, currency: Optional[str] = None, name: Option
             return {"tokens": transformed, "count": len(transformed)}
         return {"tokens": []}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Token search failed: {str(e)}")
+        print(f"Error searching tokens: {e}", file=sys.stderr)
+        raise HTTPException(status_code=500, detail="Internal Server Error: Token search failed.")
 
 @app.post("/estimate_fee")
 def estimate_fee(request: Request, tx: AnyXRPLTransaction):
@@ -1036,8 +1080,11 @@ def estimate_fee(request: Request, tx: AnyXRPLTransaction):
             return {"estimated_fee_drops": str(estimated_fee)}
         else:
             raise HTTPException(status_code=r.status_code, detail="XRPL node fee estimation failed.")
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error estimating fee: {e}", file=sys.stderr)
+        raise HTTPException(status_code=500, detail="Internal Server Error: Failed to estimate network fee.")
 
 
 def normalize_signature(signature: str) -> str:
@@ -1078,20 +1125,34 @@ def verify_xumm_signature(headers, payload_bytes: bytes) -> bool:
 def xaman_redirect(target: str):
     if not target:
         raise HTTPException(status_code=400, detail="target query required")
-    if not (target.startswith("xaman://") or target.startswith("https://") or target.startswith("http://")):
+    from urllib.parse import urlparse
+    if target.startswith("xaman://"):
+        pass
+    elif target.startswith("https://") or target.startswith("http://"):
+        try:
+            parsed = urlparse(target)
+            hostname = parsed.hostname
+            if not hostname:
+                raise HTTPException(status_code=400, detail="Invalid host in redirect target")
+            hostname = hostname.lower()
+            if hostname == "xumm.app" or hostname.endswith(".xumm.app") or hostname == "xaman.app" or hostname.endswith(".xaman.app"):
+                pass
+            else:
+                raise HTTPException(status_code=400, detail="Redirect domain not allowed")
+        except Exception as e:
+            if isinstance(e, HTTPException):
+                raise e
+            raise HTTPException(status_code=400, detail="Invalid redirect target")
+    else:
         raise HTTPException(status_code=400, detail="Unsupported redirect target")
     
     safe_target_html = escape(target, quote=True)
-    safe_target_js = json.dumps(target).replace("</", "<\\/")
     
     html = (
         "<!doctype html><html><head>"
         f'<meta http-equiv="refresh" content="0;url={safe_target_html}" />'
         "<title>Redirecting to Xaman</title>"
-        "<script>"
-        "function go() { window.location.href = " + safe_target_js + "; }"
-        "window.onload = go;"
-        "</script></head><body>"
+        "</head><body>"
         f'<p>Redirecting... <a href="{safe_target_html}">Click here if not redirected.</a></p>'
         "</body></html>"
     )
@@ -1184,6 +1245,9 @@ def simplify_state(data):
 
 @app.post("/xumm/payload")
 def create_xumm_payload(request: Request, payload: XummPayloadRequest):
+    ip = get_client_ip(request)
+    if not payload_limiter.consume(ip):
+        raise HTTPException(status_code=429, detail="Too Many Requests: Rate limit exceeded for payload creation.")
     if not XUMM_KEY or not XUMM_SECRET:
         raise HTTPException(status_code=501, detail="XUMM API keys not configured on server.")
 
@@ -1256,17 +1320,12 @@ def create_xumm_payload(request: Request, payload: XummPayloadRequest):
 
 
 @app.post("/xumm/webhook")
-def xumm_webhook(request: Request):
+async def xumm_webhook(request: Request):
     """XUMM will POST payload updates here if you configure a webhook URL.
 
     This endpoint stores the payload body in the local DB keyed by `uuid`.
     """
-    import asyncio
-    try:
-        raw_body = asyncio.run(request.body())
-    except RuntimeError:
-        loop = asyncio.get_event_loop()
-        raw_body = loop.run_until_complete(request.body())
+    raw_body = await request.body()
     
     # Security Enhancement: Strictly enforce webhook signature verification
     if not (XUMM_WEBHOOK_SECRET or XUMM_SECRET):
@@ -1424,6 +1483,9 @@ def verify_webhook(request: Request, uuid: str):
 
 @app.post("/submit")
 def submit_tx(request: Request, body: SubmitTxRequest):
+    ip = get_client_ip(request)
+    if not submit_limiter.consume(ip):
+        raise HTTPException(status_code=429, detail="Too Many Requests: Rate limit exceeded for submitting transactions.")
     tx_blob = body.tx_blob
     if not tx_blob:
         raise HTTPException(status_code=400, detail="tx_blob required")
@@ -1434,6 +1496,9 @@ def submit_tx(request: Request, body: SubmitTxRequest):
 
 @app.post("/submit_json")
 def submit_json(request: Request, body: SubmitJsonRequest):
+    ip = get_client_ip(request)
+    if not submit_limiter.consume(ip):
+        raise HTTPException(status_code=429, detail="Too Many Requests: Rate limit exceeded for submitting transactions.")
     # Convert Pydantic model to dict
     tx_json = body.tx_json
     if not tx_json:

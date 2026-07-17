@@ -3276,9 +3276,9 @@ function renderHumanReadablePreview(tx) {
       return formatXrpAmount(amt);
     } else if (typeof amt === 'object' && amt !== null) {
       const decodedCurrency = amt.currency ? decodeCurrencyCode(amt.currency) : 'Token';
-      return `${Number(amt.value).toLocaleString(undefined, {maximumFractionDigits: 6})} ${decodedCurrency} (Issued by ${shortenAddress(amt.issuer)})`;
+      return `${Number(amt.value).toLocaleString(undefined, {maximumFractionDigits: 6})} ${escapeHtml(decodedCurrency)} (Issued by ${escapeHtml(shortenAddress(amt.issuer))})`;
     }
-    return String(amt);
+    return escapeHtml(String(amt));
   };
   
   const getDateLabel = (epochSecs) => {
@@ -3335,7 +3335,7 @@ function renderHumanReadablePreview(tx) {
         
         ${tx.Fulfillment ? `
           <div class="col-sm-4 fw-semibold text-secondary">Fulfillment Signature:</div>
-          <div class="col-sm-8 text-dark font-monospace text-truncate" style="max-width:240px;" title="${tx.Fulfillment}">${tx.Fulfillment.substring(0, 12)}...</div>
+          <div class="col-sm-8 text-dark font-monospace text-truncate" style="max-width:240px;" title="${escapeHtml(tx.Fulfillment)}">${escapeHtml(tx.Fulfillment.substring(0, 12))}...</div>
         ` : ''}
       </div>
     `;
@@ -4536,7 +4536,7 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
         assetStr = 'XRP';
       } else if (typeof escrow.Amount === 'object') {
         const tokenVal = Number(escrow.Amount.value).toLocaleString(undefined, { maximumFractionDigits: 8 });
-        const decodedCurrency = escrow.Amount.currency ? decodeCurrencyCode(escrow.Amount.currency) : 'Token';
+        const decodedCurrency = escrow.Amount.currency ? escapeHtml(decodeCurrencyCode(escrow.Amount.currency)) : 'Token';
         amountVal = tokenVal;
         assetStr = decodedCurrency;
       } else {
@@ -4691,7 +4691,7 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
         amountStr = `${xrp.toLocaleString(undefined, { maximumFractionDigits: 6 })} XRP`;
       } else if (typeof escrow.Amount === 'object') {
         const tokenVal = Number(escrow.Amount.value).toLocaleString(undefined, { maximumFractionDigits: 8 });
-        const decodedCurrency = escrow.Amount.currency ? decodeCurrencyCode(escrow.Amount.currency) : 'Token';
+        const decodedCurrency = escrow.Amount.currency ? escapeHtml(decodeCurrencyCode(escrow.Amount.currency)) : 'Token';
         amountStr = `${tokenVal} ${decodedCurrency}`;
       } else {
         amountStr = String(escrow.Amount);
@@ -5207,7 +5207,7 @@ if (startVaultBtnEl) {
       return;
     }
 
-    const { vault: vaultAddress, currency, issuer, recipient: dest, releaseTime: releaseTimeVal } = window.activeMonitorContext;
+    const { currency, issuer, recipient: dest, releaseTime: releaseTimeVal } = window.activeMonitorContext;
     let formattedCurrency = formatCurrencyCode(currency);
 
     if (!xrpl.isValidAddress(dest)) {
@@ -5516,8 +5516,13 @@ async function loadSignatureHistory() {
     url += `?account=${encodeURIComponent(window.connectedAccount)}`;
   }
 
+  const headers = {};
+  if (window.connectedUserToken) {
+    headers['X-User-Token'] = window.connectedUserToken;
+  }
+
   try {
-    const resp = await fetch(url);
+    const resp = await fetch(url, { headers });
     if (!resp.ok) throw new Error(await resp.text());
     const data = await resp.json();
 
@@ -6108,7 +6113,7 @@ document.addEventListener('DOMContentLoaded', () => {
       div.id = `multisig-signer-${s}`;
       div.innerHTML = `
         <div class="text-truncate" style="max-width: 60%;">
-          <strong class="text-secondary small font-monospace">${s}</strong>
+          <strong class="text-secondary small font-monospace">${escapeHtml(s)}</strong>
           <div class="status-indicator small text-muted"><i class="bi bi-clock-history"></i> Waiting for signature...</div>
         </div>
         <div class="signer-link-col text-end">
@@ -6263,8 +6268,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const sorted = Object.entries(deposits).map(([addr, val]) => ({ addr, val })).sort((a, b) => b.val - a.val);
 
       crowdhdlLeaderboardBody.innerHTML = '';
+      const escapedSymbol = escapeHtml(readableSymbol);
       if (sorted.length === 0) {
-        crowdhdlLeaderboardBody.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-4">No deposits found for $${readableSymbol} on this account.</td></tr>`;
+        crowdhdlLeaderboardBody.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-4">No deposits found for $${escapedSymbol} on this account.</td></tr>`;
         crowdhdlTotalLocked.textContent = `0 ${readableSymbol}`;
         crowdhdlDepositorsCount.textContent = '0 Depositors';
       } else {
@@ -6275,7 +6281,7 @@ document.addEventListener('DOMContentLoaded', () => {
           tr.innerHTML = `
             <td><strong>#${idx + 1}</strong></td>
             <td class="font-monospace">${shortenAddress(d.addr)}</td>
-            <td class="fw-bold text-success">${d.val.toLocaleString()} ${readableSymbol}</td>
+            <td class="fw-bold text-success">${d.val.toLocaleString()} ${escapedSymbol}</td>
           `;
           crowdhdlLeaderboardBody.appendChild(tr);
         });
@@ -6605,8 +6611,8 @@ document.addEventListener('DOMContentLoaded', () => {
         </td>
         <td class="align-middle font-monospace fw-semibold">${balance.toLocaleString()}</td>
         <td class="align-middle">
-          <a href="https://xrpl.org/account/${lock.vault}" target="_blank" class="font-monospace text-primary text-decoration-none small text-truncate d-inline-block" style="max-width: 140px;" title="${lock.vault}">
-            ${lock.vault}
+          <a href="https://xrpl.org/account/${escapeHtml(lock.vault)}" target="_blank" class="font-monospace text-primary text-decoration-none small text-truncate d-inline-block" style="max-width: 140px;" title="${escapeHtml(lock.vault)}">
+            ${escapeHtml(lock.vault)}
           </a>
         </td>
         <td class="align-middle text-secondary small">${new Date(lock.releaseTime).toLocaleString()}</td>
@@ -6693,7 +6699,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (actionEl) {
           actionEl.innerHTML = `
             <span class="badge bg-success text-white fw-bold px-2 py-1"><i class="bi bi-check-lg"></i> Swept</span>
-            <button class="btn btn-outline-danger btn-xs lock-delete-btn ms-2" data-vault="${lock.vault}" data-currency="${lock.currency}">
+            <button class="btn btn-outline-danger btn-xs lock-delete-btn ms-2" data-vault="${escapeHtml(lock.vault)}" data-currency="${escapeHtml(lock.currency)}">
               <i class="bi bi-trash"></i>
             </button>
           `;
@@ -6705,7 +6711,7 @@ document.addEventListener('DOMContentLoaded', () => {
         countdownEl.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-circle-fill"></i> Sweep Complete</span>';
         if (actionEl) {
           actionEl.innerHTML = `
-            <button class="btn btn-outline-danger btn-xs lock-delete-btn" data-vault="${lock.vault}" data-currency="${lock.currency}">
+            <button class="btn btn-outline-danger btn-xs lock-delete-btn" data-vault="${escapeHtml(lock.vault)}" data-currency="${escapeHtml(lock.currency)}">
               <i class="bi bi-trash"></i> Remove
             </button>
           `;
@@ -6717,10 +6723,10 @@ document.addEventListener('DOMContentLoaded', () => {
         countdownEl.innerHTML = '<span class="badge bg-warning-subtle text-warning border border-warning-subtle animate-pulse"><i class="bi bi-unlock-fill"></i> Ready to Sweep</span>';
         if (actionEl) {
           actionEl.innerHTML = `
-            <button class="btn btn-success btn-xs fw-bold lock-claim-btn" data-vault="${lock.vault}" data-currency="${lock.currency}" data-issuer="${lock.issuer}" data-recipient="${lock.recipient}">
+            <button class="btn btn-success btn-xs fw-bold lock-claim-btn" data-vault="${escapeHtml(lock.vault)}" data-currency="${escapeHtml(lock.currency)}" data-issuer="${escapeHtml(lock.issuer)}" data-recipient="${escapeHtml(lock.recipient)}">
               <i class="bi bi-box-arrow-right"></i> Sweep
             </button>
-            <button class="btn btn-outline-info btn-xs lock-monitor-btn ms-1" data-vault="${lock.vault}" data-currency="${lock.currency}" data-issuer="${lock.issuer}" data-recipient="${lock.recipient}" data-release="${lock.releaseTime}">
+            <button class="btn btn-outline-info btn-xs lock-monitor-btn ms-1" data-vault="${escapeHtml(lock.vault)}" data-currency="${escapeHtml(lock.currency)}" data-issuer="${escapeHtml(lock.issuer)}" data-recipient="${escapeHtml(lock.recipient)}" data-release="${escapeHtml(lock.releaseTime)}">
               <i class="bi bi-eye"></i> Monitor
             </button>
           `;
@@ -6742,7 +6748,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (actionEl) {
           actionEl.innerHTML = `
-            <button class="btn btn-outline-info btn-xs lock-monitor-btn" data-vault="${lock.vault}" data-currency="${lock.currency}" data-issuer="${lock.issuer}" data-recipient="${lock.recipient}" data-release="${lock.releaseTime}">
+            <button class="btn btn-outline-info btn-xs lock-monitor-btn" data-vault="${escapeHtml(lock.vault)}" data-currency="${escapeHtml(lock.currency)}" data-issuer="${escapeHtml(lock.issuer)}" data-recipient="${escapeHtml(lock.recipient)}" data-release="${escapeHtml(lock.releaseTime)}">
               <i class="bi bi-eye"></i> Monitor
             </button>
           `;

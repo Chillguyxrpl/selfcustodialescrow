@@ -12,7 +12,7 @@ This project provides a beautiful frontend UI and a robust FastAPI backend that 
 * **Real-time Validations:** Instant r-Address validation, Trustline checking, and live network fee estimation.
 * **Seamless Xaman Integration:** Sign in via QR code or mobile deep-link, and receive Push Notifications to sign transactions directly on your phone.
 * **Active Escrow Dashboard:** Scan any account to view, claim, or cancel active escrows directly from the UI.
-* **100% Non-Custodial:** Private keys and seeds are **never** touched or stored by this application.
+* **100% Non-Custodial:** Private keys and seeds are **never** sent to or stored by the server. All transaction signing for automated features (such as the L2 Vault Monitor) occurs entirely locally in your browser's memory.
 
 ---
 
