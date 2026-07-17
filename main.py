@@ -910,38 +910,25 @@ def get_active_escrows(request: Request, account: str):
             idx = e.get("index")
             if idx in escrow_date_map:
                 e["CreationTime"] = escrow_date_map[idx]
+            if idx in escrow_seq_map:
+                e["OfferSequence"] = escrow_seq_map[idx]
                 
-            if "OfferSequence" not in e:
-                if idx in escrow_seq_map:
-                    e["OfferSequence"] = escrow_seq_map[idx]
-                else:
-                    prev_tx = e.get("PreviousTxnID")
-                    if prev_tx:
-                        tx_req = {"method": "tx", "params": [{"transaction": prev_tx}]}
-                        try:
-                            tx_res = session.post(XRPL_RPC, json=tx_req, timeout=5)
-                            if tx_res.status_code == 200:
-                                tx_data = tx_res.json().get("result", {})
-                                if tx_data.get("TransactionType") == "EscrowCreate":
+            # If either field is still missing, fetch the creation transaction details once
+            if "OfferSequence" not in e or "CreationTime" not in e:
+                prev_tx = e.get("PreviousTxnID")
+                if prev_tx:
+                    tx_req = {"method": "tx", "params": [{"transaction": prev_tx}]}
+                    try:
+                        tx_res = session.post(XRPL_RPC, json=tx_req, timeout=5)
+                        if tx_res.status_code == 200:
+                            tx_data = tx_res.json().get("result", {})
+                            if tx_data.get("TransactionType") == "EscrowCreate":
+                                if "OfferSequence" not in e:
                                     e["OfferSequence"] = tx_data.get("Sequence")
-                                    if "date" in tx_data:
-                                        e["CreationTime"] = tx_data["date"]
-                        except Exception:
-                            pass
-            else:
-                # If OfferSequence is present but CreationTime is not in the map, still try to fetch creation date using PreviousTxnID
-                if "CreationTime" not in e:
-                    prev_tx = e.get("PreviousTxnID")
-                    if prev_tx:
-                        tx_req = {"method": "tx", "params": [{"transaction": prev_tx}]}
-                        try:
-                            tx_res = session.post(XRPL_RPC, json=tx_req, timeout=5)
-                            if tx_res.status_code == 200:
-                                tx_data = tx_res.json().get("result", {})
-                                if "date" in tx_data:
+                                if "CreationTime" not in e and "date" in tx_data:
                                     e["CreationTime"] = tx_data["date"]
-                        except Exception:
-                            pass
+                    except Exception:
+                        pass
 
         escrows.extend(incoming_candidates)
         return {"account": account, "escrows": escrows}
