@@ -220,12 +220,48 @@ function updateFormTrustlinesDropdowns() {
       const curInput = tokenGroup.querySelector('#field_AMOUNT_CURRENCY');
       const issInput = tokenGroup.querySelector('#field_AMOUNT_ISSUER');
       populateTrustlinesDropdown(selectEl, curInput, issInput);
+/**
+ * Generic function to populate a <select> element with a user's trustlines.
+ * @param {object} options - Configuration options.
+ * @param {string} options.selectId - The ID of the <select> element.
+ * @param {string} [options.containerSelector] - A selector for a parent container to hide if the user is not connected.
+ * @param {string} [options.placeholderText] - The text for the default, unselected option.
+ * @param {boolean} [options.allowCustom] - If true, adds a "-- Custom Token Search --" option.
+ * @param {function} [options.onSelect] - A callback function to execute when a trustline is selected. It receives the selected token object { currency, issuer }.
+ * @param {function} [options.optionValueBuilder] - A function to build the value for each <option>. Defaults to JSON.stringify({ currency, issuer }).
+ * @param {function} [options.optionTextBuilder] - A function to build the text content for each <option>.
+ */
+function populateGenericTrustlineDropdown({
+  selectId,
+  containerSelector,
+  placeholderText = 'Select a token from your trustlines...',
+  allowCustom = false,
+  onSelect,
+  optionValueBuilder = (tl) => JSON.stringify({ currency: tl.currency, issuer: tl.issuer }),
+  optionTextBuilder = (tl) => {
+    const currency = tl.currency;
+    const decodedVal = decodeCurrencyCode(currency);
+    const balanceFormatted = parseFloat(tl.balance).toLocaleString(undefined, { maximumFractionDigits: 6 });
+    const limitFormatted = parseFloat(tl.limit).toLocaleString(undefined, { maximumFractionDigits: 6 });
+
+    if (currency.startsWith('03') && currency.length === 40) {
+      return `AMM Liquidity Pool Token (LP) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
     }
   });
   populateMemeTokenSelect();
   populateVaultTrustlinesDropdown();
   populateCrowdhdlTokenSelect();
 }
+    const hasDecodedName = decodedVal !== currency;
+    if (!hasDecodedName) {
+      return `${currency} (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
+    }
+    const tokenName = tl.name && tl.name !== decodedVal ? tl.name : decodedVal;
+    return `${tokenName} (${decodedVal}) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
+  }
+}) {
+  const selectEl = document.getElementById(selectId);
+  if (!selectEl) return;
 
 function populateMemeTokenSelect() {
   const selectEl = document.getElementById('memeTokenSelect');
@@ -235,9 +271,11 @@ function populateMemeTokenSelect() {
 
   const btnSearch = document.getElementById('btnMemeTokenSearch');
   if (btnSearch) btnSearch.style.display = 'none';
+  const parentContainer = containerSelector ? selectEl.closest(containerSelector) : null;
 
   // If no wallet connected
   if (!window.connectedAccount) {
+    if (parentContainer) parentContainer.style.display = 'none';
     const opt = document.createElement('option');
     opt.value = '';
     opt.textContent = '❌ Connect wallet to view trustlines';
@@ -247,11 +285,14 @@ function populateMemeTokenSelect() {
   }
 
   // If currently loading
+  if (parentContainer) parentContainer.style.display = 'block';
+
   if (window.loadingTrustlines) {
     const opt = document.createElement('option');
     opt.value = '';
     opt.textContent = '⏳ Loading trustlines from ledger...';
     selectEl.appendChild(opt);
+    selectEl.innerHTML = '<option value="">⏳ Loading trustlines from ledger...</option>';
     selectEl.disabled = true;
     return;
   }
@@ -271,6 +312,7 @@ function populateMemeTokenSelect() {
     selectEl.disabled = false;
     return;
   }
+  selectEl.innerHTML = `<option value="">${placeholderText}</option>`;
 
   // Add default option
   const placeholder = document.createElement('option');
@@ -298,6 +340,8 @@ function populateMemeTokenSelect() {
         opt.textContent = `${tokenName} (${decodedVal}) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
       }
     }
+    opt.value = optionValueBuilder(tl);
+    opt.textContent = optionTextBuilder(tl);
     selectEl.appendChild(opt);
   });
 
@@ -320,6 +364,11 @@ function populateVaultTrustlinesDropdown() {
   if (!window.connectedAccount) {
     if (parentContainer) parentContainer.style.display = 'none';
     return;
+  if (trustlines.length === 0) {
+    selectEl.innerHTML = '<option value="">❌ No active trustlines found for this account</option>';
+    if (!allowCustom) {
+      selectEl.disabled = true;
+    }
   }
 
   if (parentContainer) parentContainer.style.display = 'block';
@@ -332,6 +381,11 @@ function populateVaultTrustlinesDropdown() {
     selectEl.appendChild(opt);
     selectEl.disabled = true;
     return;
+  if (allowCustom) {
+    const customOpt = document.createElement('option');
+    customOpt.value = 'custom';
+    customOpt.textContent = '-- Custom Token Search --';
+    selectEl.appendChild(customOpt);
   }
 
   const trustlines = window.userTrustlines || [];
@@ -342,7 +396,27 @@ function populateVaultTrustlinesDropdown() {
     selectEl.appendChild(opt);
     selectEl.disabled = true;
     return;
+  if (onSelect) {
+    // Clone and replace to avoid multiple event listeners
+    const newSelect = selectEl.cloneNode(true);
+    selectEl.parentNode.replaceChild(newSelect, selectEl);
+    newSelect.addEventListener('change', () => {
+      if (!newSelect.value || newSelect.value === 'custom') {
+        if (newSelect.value === 'custom' && window.activeTokenTarget) {
+            const modalEl = document.getElementById('tokenSearchModal');
+            if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+        return;
+      }
+      try {
+        const data = JSON.parse(newSelect.value);
+        onSelect(data);
+      } catch (e) {
+        console.error('Error selecting trustline:', e);
+      }
+    });
   }
+}
 
   // Add default option
   const placeholder = document.createElement('option');
@@ -369,9 +443,21 @@ function populateVaultTrustlinesDropdown() {
         const tokenName = tl.name && tl.name !== decodedVal ? tl.name : decodedVal;
         opt.textContent = `${tokenName} (${decodedVal}) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
       }
+function updateFormTrustlinesDropdowns() {
+  const dropdowns = document.querySelectorAll('.trustlines-select');
+  dropdowns.forEach(selectEl => {
+    const tokenGroup = selectEl.closest('.token-group');
+    if (tokenGroup) {
+      const curInput = tokenGroup.querySelector('#field_AMOUNT_CURRENCY');
+      const issInput = tokenGroup.querySelector('#field_AMOUNT_ISSUER');
+      populateTrustlinesDropdown(selectEl, curInput, issInput);
     }
     selectEl.appendChild(opt);
   });
+  populateMemeTokenSelect();
+  populateVaultTrustlinesDropdown();
+  populateCrowdhdlTokenSelect();
+}
 
   // When selected, auto-fill inputs
   const newSelect = selectEl.cloneNode(true);
@@ -392,6 +478,35 @@ function populateVaultTrustlinesDropdown() {
       console.error('Error selecting vault trustline:', e);
     }
   });
+function populateMemeTokenSelect() {
+    populateGenericTrustlineDropdown({
+        selectId: 'memeTokenSelect',
+        allowCustom: true,
+        optionValueBuilder: (tl) => JSON.stringify({ currency: tl.currency, decoded_currency: tl.decoded_currency, issuer: tl.issuer }),
+        onSelect: (data) => {
+            const { currency, issuer } = data;
+            document.getElementById('memeTokenIssuer').value = issuer;
+            document.getElementById('memeTokenHex').value = formatCurrencyCode(currency);
+        }
+    });
+}
+
+function populateVaultTrustlinesDropdown() {
+    populateGenericTrustlineDropdown({
+        selectId: 'vaultTrustlineSelect',
+        containerSelector: '.vault-trustlines-container',
+        onSelect: (data) => {
+            const { currency, issuer } = data;
+            const curInput = document.getElementById('vaultCurrency');
+            const issInput = document.getElementById('vaultIssuer');
+            if (curInput && issInput) {
+                curInput.value = decodeCurrencyCode(currency);
+                issInput.value = issuer;
+                curInput.dispatchEvent(new Event('input', { bubbles: true }));
+                issInput.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
+    });
 }
 
 function populateCrowdhdlTokenSelect() {
@@ -458,6 +573,12 @@ function populateCrowdhdlTokenSelect() {
     }
     selectEl.appendChild(opt);
   });
+    populateGenericTrustlineDropdown({
+        selectId: 'crowdhdlTokenSelect',
+        containerSelector: '.crowdhdl-trustlines-container',
+        optionValueBuilder: (tl) => JSON.stringify({ currency: tl.currency, decoded_currency: tl.decoded_currency, issuer: tl.issuer })
+        // No onSelect needed as it's for scanning, not filling inputs
+    });
 }
 
 function updateSelectedTokenBadge(tokenGroup, name, domain, icon) {
@@ -3276,9 +3397,9 @@ function renderHumanReadablePreview(tx) {
       return formatXrpAmount(amt);
     } else if (typeof amt === 'object' && amt !== null) {
       const decodedCurrency = amt.currency ? decodeCurrencyCode(amt.currency) : 'Token';
-      return `${Number(amt.value).toLocaleString(undefined, {maximumFractionDigits: 6})} ${escapeHtml(decodedCurrency)} (Issued by ${escapeHtml(shortenAddress(amt.issuer))})`;
+      return `${Number(amt.value).toLocaleString(undefined, {maximumFractionDigits: 6})} ${decodedCurrency} (Issued by ${shortenAddress(amt.issuer)})`;
     }
-    return escapeHtml(String(amt));
+    return String(amt);
   };
   
   const getDateLabel = (epochSecs) => {
@@ -3335,7 +3456,7 @@ function renderHumanReadablePreview(tx) {
         
         ${tx.Fulfillment ? `
           <div class="col-sm-4 fw-semibold text-secondary">Fulfillment Signature:</div>
-          <div class="col-sm-8 text-dark font-monospace text-truncate" style="max-width:240px;" title="${escapeHtml(tx.Fulfillment)}">${escapeHtml(tx.Fulfillment.substring(0, 12))}...</div>
+          <div class="col-sm-8 text-dark font-monospace text-truncate" style="max-width:240px;" title="${tx.Fulfillment}">${tx.Fulfillment.substring(0, 12)}...</div>
         ` : ''}
       </div>
     `;
@@ -4536,7 +4657,7 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
         assetStr = 'XRP';
       } else if (typeof escrow.Amount === 'object') {
         const tokenVal = Number(escrow.Amount.value).toLocaleString(undefined, { maximumFractionDigits: 8 });
-        const decodedCurrency = escrow.Amount.currency ? escapeHtml(decodeCurrencyCode(escrow.Amount.currency)) : 'Token';
+        const decodedCurrency = escrow.Amount.currency ? decodeCurrencyCode(escrow.Amount.currency) : 'Token';
         amountVal = tokenVal;
         assetStr = decodedCurrency;
       } else {
@@ -4691,7 +4812,7 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
         amountStr = `${xrp.toLocaleString(undefined, { maximumFractionDigits: 6 })} XRP`;
       } else if (typeof escrow.Amount === 'object') {
         const tokenVal = Number(escrow.Amount.value).toLocaleString(undefined, { maximumFractionDigits: 8 });
-        const decodedCurrency = escrow.Amount.currency ? escapeHtml(decodeCurrencyCode(escrow.Amount.currency)) : 'Token';
+        const decodedCurrency = escrow.Amount.currency ? decodeCurrencyCode(escrow.Amount.currency) : 'Token';
         amountStr = `${tokenVal} ${decodedCurrency}`;
       } else {
         amountStr = String(escrow.Amount);
@@ -5207,7 +5328,7 @@ if (startVaultBtnEl) {
       return;
     }
 
-    const { currency, issuer, recipient: dest, releaseTime: releaseTimeVal } = window.activeMonitorContext;
+    const { vault: vaultAddress, currency, issuer, recipient: dest, releaseTime: releaseTimeVal } = window.activeMonitorContext;
     let formattedCurrency = formatCurrencyCode(currency);
 
     if (!xrpl.isValidAddress(dest)) {
@@ -5516,13 +5637,8 @@ async function loadSignatureHistory() {
     url += `?account=${encodeURIComponent(window.connectedAccount)}`;
   }
 
-  const headers = {};
-  if (window.connectedUserToken) {
-    headers['X-User-Token'] = window.connectedUserToken;
-  }
-
   try {
-    const resp = await fetch(url, { headers });
+    const resp = await fetch(url);
     if (!resp.ok) throw new Error(await resp.text());
     const data = await resp.json();
 
@@ -6113,7 +6229,7 @@ document.addEventListener('DOMContentLoaded', () => {
       div.id = `multisig-signer-${s}`;
       div.innerHTML = `
         <div class="text-truncate" style="max-width: 60%;">
-          <strong class="text-secondary small font-monospace">${escapeHtml(s)}</strong>
+          <strong class="text-secondary small font-monospace">${s}</strong>
           <div class="status-indicator small text-muted"><i class="bi bi-clock-history"></i> Waiting for signature...</div>
         </div>
         <div class="signer-link-col text-end">
@@ -6268,9 +6384,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const sorted = Object.entries(deposits).map(([addr, val]) => ({ addr, val })).sort((a, b) => b.val - a.val);
 
       crowdhdlLeaderboardBody.innerHTML = '';
-      const escapedSymbol = escapeHtml(readableSymbol);
       if (sorted.length === 0) {
-        crowdhdlLeaderboardBody.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-4">No deposits found for $${escapedSymbol} on this account.</td></tr>`;
+        crowdhdlLeaderboardBody.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-4">No deposits found for $${readableSymbol} on this account.</td></tr>`;
         crowdhdlTotalLocked.textContent = `0 ${readableSymbol}`;
         crowdhdlDepositorsCount.textContent = '0 Depositors';
       } else {
@@ -6281,7 +6396,7 @@ document.addEventListener('DOMContentLoaded', () => {
           tr.innerHTML = `
             <td><strong>#${idx + 1}</strong></td>
             <td class="font-monospace">${shortenAddress(d.addr)}</td>
-            <td class="fw-bold text-success">${d.val.toLocaleString()} ${escapedSymbol}</td>
+            <td class="fw-bold text-success">${d.val.toLocaleString()} ${readableSymbol}</td>
           `;
           crowdhdlLeaderboardBody.appendChild(tr);
         });
@@ -6611,8 +6726,8 @@ document.addEventListener('DOMContentLoaded', () => {
         </td>
         <td class="align-middle font-monospace fw-semibold">${balance.toLocaleString()}</td>
         <td class="align-middle">
-          <a href="https://xrpl.org/account/${escapeHtml(lock.vault)}" target="_blank" class="font-monospace text-primary text-decoration-none small text-truncate d-inline-block" style="max-width: 140px;" title="${escapeHtml(lock.vault)}">
-            ${escapeHtml(lock.vault)}
+          <a href="https://xrpl.org/account/${lock.vault}" target="_blank" class="font-monospace text-primary text-decoration-none small text-truncate d-inline-block" style="max-width: 140px;" title="${lock.vault}">
+            ${lock.vault}
           </a>
         </td>
         <td class="align-middle text-secondary small">${new Date(lock.releaseTime).toLocaleString()}</td>
@@ -6699,7 +6814,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (actionEl) {
           actionEl.innerHTML = `
             <span class="badge bg-success text-white fw-bold px-2 py-1"><i class="bi bi-check-lg"></i> Swept</span>
-            <button class="btn btn-outline-danger btn-xs lock-delete-btn ms-2" data-vault="${escapeHtml(lock.vault)}" data-currency="${escapeHtml(lock.currency)}">
+            <button class="btn btn-outline-danger btn-xs lock-delete-btn ms-2" data-vault="${lock.vault}" data-currency="${lock.currency}">
               <i class="bi bi-trash"></i>
             </button>
           `;
@@ -6711,7 +6826,7 @@ document.addEventListener('DOMContentLoaded', () => {
         countdownEl.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-circle-fill"></i> Sweep Complete</span>';
         if (actionEl) {
           actionEl.innerHTML = `
-            <button class="btn btn-outline-danger btn-xs lock-delete-btn" data-vault="${escapeHtml(lock.vault)}" data-currency="${escapeHtml(lock.currency)}">
+            <button class="btn btn-outline-danger btn-xs lock-delete-btn" data-vault="${lock.vault}" data-currency="${lock.currency}">
               <i class="bi bi-trash"></i> Remove
             </button>
           `;
@@ -6723,10 +6838,10 @@ document.addEventListener('DOMContentLoaded', () => {
         countdownEl.innerHTML = '<span class="badge bg-warning-subtle text-warning border border-warning-subtle animate-pulse"><i class="bi bi-unlock-fill"></i> Ready to Sweep</span>';
         if (actionEl) {
           actionEl.innerHTML = `
-            <button class="btn btn-success btn-xs fw-bold lock-claim-btn" data-vault="${escapeHtml(lock.vault)}" data-currency="${escapeHtml(lock.currency)}" data-issuer="${escapeHtml(lock.issuer)}" data-recipient="${escapeHtml(lock.recipient)}">
+            <button class="btn btn-success btn-xs fw-bold lock-claim-btn" data-vault="${lock.vault}" data-currency="${lock.currency}" data-issuer="${lock.issuer}" data-recipient="${lock.recipient}">
               <i class="bi bi-box-arrow-right"></i> Sweep
             </button>
-            <button class="btn btn-outline-info btn-xs lock-monitor-btn ms-1" data-vault="${escapeHtml(lock.vault)}" data-currency="${escapeHtml(lock.currency)}" data-issuer="${escapeHtml(lock.issuer)}" data-recipient="${escapeHtml(lock.recipient)}" data-release="${escapeHtml(lock.releaseTime)}">
+            <button class="btn btn-outline-info btn-xs lock-monitor-btn ms-1" data-vault="${lock.vault}" data-currency="${lock.currency}" data-issuer="${lock.issuer}" data-recipient="${lock.recipient}" data-release="${lock.releaseTime}">
               <i class="bi bi-eye"></i> Monitor
             </button>
           `;
@@ -6748,7 +6863,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (actionEl) {
           actionEl.innerHTML = `
-            <button class="btn btn-outline-info btn-xs lock-monitor-btn" data-vault="${escapeHtml(lock.vault)}" data-currency="${escapeHtml(lock.currency)}" data-issuer="${escapeHtml(lock.issuer)}" data-recipient="${escapeHtml(lock.recipient)}" data-release="${escapeHtml(lock.releaseTime)}">
+            <button class="btn btn-outline-info btn-xs lock-monitor-btn" data-vault="${lock.vault}" data-currency="${lock.currency}" data-issuer="${lock.issuer}" data-recipient="${lock.recipient}" data-release="${lock.releaseTime}">
               <i class="bi bi-eye"></i> Monitor
             </button>
           `;
