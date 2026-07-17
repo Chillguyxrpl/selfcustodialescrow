@@ -852,6 +852,7 @@ def get_active_escrows(request: Request, account: str):
         resolved_escrows = set()
         incoming_candidates = []
         escrow_seq_map = {}
+        escrow_date_map = {}
         
         # Scan transaction history from newest to oldest
         for item in transactions:
@@ -876,8 +877,12 @@ def get_active_escrows(request: Request, account: str):
                         escrow_index = created.get("LedgerIndex")
                         break
                 
-                if escrow_index and seq is not None:
-                    escrow_seq_map[escrow_index] = seq
+                creation_date = tx.get("date") or item.get("date")
+                if escrow_index:
+                    if seq is not None:
+                        escrow_seq_map[escrow_index] = seq
+                    if creation_date is not None:
+                        escrow_date_map[escrow_index] = creation_date
                     
                 if tx.get("Destination") == account and tx.get("Account") != account:
                     if f"{creator}-{seq}" not in resolved_escrows:
@@ -894,15 +899,19 @@ def get_active_escrows(request: Request, account: str):
                                 "DestinationTag": tx.get("DestinationTag"),
                                 "SourceTag": tx.get("SourceTag"),
                                 "OfferSequence": seq,
-                                "PreviousTxnLgrSeq": tx.get("ledger_index") or item.get("ledger_index")
+                                "PreviousTxnLgrSeq": tx.get("ledger_index") or item.get("ledger_index"),
+                                "CreationTime": creation_date
                             }
                             incoming_candidates.append(escrow_obj)
                             existing_indexes.add(escrow_index)
                             
-        # Inject OfferSequence for existing account_objects using history map or secondary RPC fetch
+        # Inject OfferSequence and CreationTime for existing account_objects using history map or secondary RPC fetch
         for e in escrows:
+            idx = e.get("index")
+            if idx in escrow_date_map:
+                e["CreationTime"] = escrow_date_map[idx]
+                
             if "OfferSequence" not in e:
-                idx = e.get("index")
                 if idx in escrow_seq_map:
                     e["OfferSequence"] = escrow_seq_map[idx]
                 else:
@@ -915,6 +924,22 @@ def get_active_escrows(request: Request, account: str):
                                 tx_data = tx_res.json().get("result", {})
                                 if tx_data.get("TransactionType") == "EscrowCreate":
                                     e["OfferSequence"] = tx_data.get("Sequence")
+                                    if "date" in tx_data:
+                                        e["CreationTime"] = tx_data["date"]
+                        except Exception:
+                            pass
+            else:
+                # If OfferSequence is present but CreationTime is not in the map, still try to fetch creation date using PreviousTxnID
+                if "CreationTime" not in e:
+                    prev_tx = e.get("PreviousTxnID")
+                    if prev_tx:
+                        tx_req = {"method": "tx", "params": [{"transaction": prev_tx}]}
+                        try:
+                            tx_res = session.post(XRPL_RPC, json=tx_req, timeout=5)
+                            if tx_res.status_code == 200:
+                                tx_data = tx_res.json().get("result", {})
+                                if "date" in tx_data:
+                                    e["CreationTime"] = tx_data["date"]
                         except Exception:
                             pass
 

@@ -4260,6 +4260,43 @@ function formatSecondsToRelative(diff) {
   return `${mins}m ${secs}s`;
 }
 
+window.calculateEscrowProgress = function(finishAfter, creationTime, cancelAfter) {
+  const nowMs = Date.now();
+  const xrplNow = Math.floor(nowMs / 1000) - 946684800; // XRPL Epoch seconds
+  
+  if (cancelAfter && xrplNow >= cancelAfter) {
+    return { pct: 100, color: 'bg-danger', label: 'Expired (Refundable)' };
+  }
+  
+  if (!finishAfter || xrplNow >= finishAfter) {
+    return { pct: 100, color: 'bg-success progress-bar-success-glow', label: 'Ready to Claim!' };
+  }
+  
+  // 1. Ripple Epoch vs Unix Epoch Mismatches
+  const finishMs = finishAfter * 1000 + 946684800000;
+  let creationMs = creationTime ? (creationTime * 1000 + 946684800000) : null;
+  
+  // 2. Missing Anchor Time Fallback: default to 30 days lockup before release
+  if (!creationMs) {
+    creationMs = finishMs - (30 * 86400 * 1000);
+  }
+  
+  const totalDurationMs = finishMs - creationMs;
+  const elapsedMs = nowMs - creationMs;
+  
+  let pct = 0;
+  // 3. Negative Value Safeguard
+  if (totalDurationMs > 0 && elapsedMs > 0) {
+    pct = Math.max(0, Math.min(99, Math.floor((elapsedMs / totalDurationMs) * 100)));
+  }
+  
+  return {
+    pct: pct,
+    color: 'bg-primary progress-bar-striped progress-bar-animated progress-bar-glow',
+    label: `Locked (unlocks in ${formatSecondsToRelative(finishAfter - xrplNow)})`
+  };
+};
+
 function startLiveCountdownTimer() {
   if (window.liveCountdownTimer) clearInterval(window.liveCountdownTimer);
   window.liveCountdownTimer = setInterval(() => {
@@ -4286,33 +4323,20 @@ function startLiveCountdownTimer() {
     document.querySelectorAll('.escrow-progress-container').forEach(el => {
       const finishAfter = el.dataset.finish ? Number(el.dataset.finish) : null;
       const cancelAfter = el.dataset.cancel ? Number(el.dataset.cancel) : null;
+      const creationTime = el.dataset.creation ? Number(el.dataset.creation) : null;
+      
       const progressBar = el.querySelector('.progress-bar');
       const progressLabel = el.querySelector('.progress-label');
       const progressText = el.querySelector('.progress-text');
       
       if (!progressBar || !progressLabel) return;
       
-      let progressPct = 100;
-      let progressColor = 'bg-success';
-      let label = 'Ready to Claim!';
+      const progress = window.calculateEscrowProgress(finishAfter, creationTime, cancelAfter);
       
-      if (finishAfter && xrplNow < finishAfter) {
-        const remaining = finishAfter - xrplNow;
-        const duration = 86400;
-        const elapsed = Math.max(0, duration - remaining);
-        progressPct = Math.min(95, Math.floor((elapsed / duration) * 100));
-        progressColor = 'bg-primary progress-bar-striped progress-bar-animated';
-        label = `Locked (unlocks in ${formatSecondsToRelative(finishAfter - xrplNow)})`;
-      } else if (cancelAfter && xrplNow >= cancelAfter) {
-        progressPct = 100;
-        progressColor = 'bg-danger';
-        label = 'Expired (Refundable)';
-      }
-      
-      progressBar.className = `progress-bar ${progressColor}`;
-      progressBar.style.width = `${progressPct}%`;
-      progressLabel.innerHTML = label;
-      if (progressText) progressText.textContent = `${progressPct}%`;
+      progressBar.className = `progress-bar ${progress.color}`;
+      progressBar.style.width = `${progress.pct}%`;
+      progressLabel.innerHTML = progress.label;
+      if (progressText) progressText.textContent = `${progress.pct}%`;
     });
   }, 1000);
 }
@@ -4525,37 +4549,16 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
       }
       timeHtml += '</div>';
       
-      let progressPct = 0;
-      let progressColor = 'bg-primary';
-      let progressLabel = '';
-      const nowVal = Math.floor(Date.now() / 1000) - 946684800; // XRPL Epoch seconds
-
-      if (escrow.FinishAfter && nowVal < escrow.FinishAfter) {
-        const remaining = escrow.FinishAfter - nowVal;
-        const duration = 86400;
-        const elapsed = Math.max(0, duration - remaining);
-        progressPct = Math.min(95, Math.floor((elapsed / duration) * 100));
-        progressColor = 'bg-primary progress-bar-striped progress-bar-animated';
-        const rText = getRelativeTimeHtml(escrow.FinishAfter);
-        progressLabel = `Locked (${rText})`;
-      } else if (escrow.CancelAfter && nowVal >= escrow.CancelAfter) {
-        progressPct = 100;
-        progressColor = 'bg-danger';
-        progressLabel = 'Expired (Refundable)';
-      } else {
-        progressPct = 100;
-        progressColor = 'bg-success';
-        progressLabel = 'Ready to Claim!';
-      }
+      const progress = window.calculateEscrowProgress(escrow.FinishAfter, escrow.CreationTime, escrow.CancelAfter);
       
       const progressBarHtml = `
-        <div style="min-width: 130px;" class="escrow-progress-container" data-finish="${escrow.FinishAfter || ''}" data-cancel="${escrow.CancelAfter || ''}">
+        <div style="min-width: 130px;" class="escrow-progress-container" data-finish="${escrow.FinishAfter || ''}" data-cancel="${escrow.CancelAfter || ''}" data-creation="${escrow.CreationTime || ''}">
           <div class="d-flex justify-content-between mb-1" style="font-size: 0.65rem;">
-            <span class="fw-semibold text-secondary progress-label">${progressLabel}</span>
-            <span class="text-secondary fw-semibold progress-text">${progressPct}%</span>
+            <span class="fw-semibold text-secondary progress-label">${progress.label}</span>
+            <span class="text-secondary fw-semibold progress-text">${progress.pct}%</span>
           </div>
           <div class="progress" style="height: 5px;">
-            <div class="progress-bar ${progressColor}" role="progressbar" style="width: ${progressPct}%" aria-valuenow="${progressPct}" aria-valuemin="0" aria-valuemax="100"></div>
+            <div class="progress-bar ${progress.color}" role="progressbar" style="width: ${progress.pct}%" aria-valuenow="${progress.pct}" aria-valuemin="0" aria-valuemax="100"></div>
           </div>
         </div>
       `;
@@ -4708,41 +4711,19 @@ async function renderActiveEscrows(account, container, preFetchedEscrows = null)
            ${timeDetails}
            <div class="mt-3 pt-2 border-top">
              ${(() => {
-               const nowVal = Math.floor(Date.now() / 1000) - 946684800; // XRPL Epoch seconds
-               let progressPct = 0;
-               let progressColor = 'bg-primary';
-               let progressLabel = '';
-
-               if (escrow.FinishAfter && nowVal < escrow.FinishAfter) {
-                 const remaining = escrow.FinishAfter - nowVal;
-                 const duration = 86400;
-                 const elapsed = Math.max(0, duration - remaining);
-                 progressPct = Math.min(95, Math.floor((elapsed / duration) * 100));
-                 progressColor = 'bg-primary progress-bar-striped progress-bar-animated';
-                 const rText = getRelativeTimeHtml(escrow.FinishAfter);
-                 progressLabel = `<i class="bi bi-lock-fill text-primary"></i> Locked (Release ${rText})`;
-               } else if (escrow.CancelAfter && nowVal >= escrow.CancelAfter) {
-                 progressPct = 100;
-                 progressColor = 'bg-danger';
-                 progressLabel = '<i class="bi bi-exclamation-triangle-fill text-danger"></i> Expired (Refundable)';
-               } else {
-                 progressPct = 100;
-                 progressColor = 'bg-success';
-                 progressLabel = '<i class="bi bi-unlock-fill text-success"></i> Ready to Claim!';
-               }
-
-               return `
-                 <div class="escrow-progress-container" data-finish="${escrow.FinishAfter || ''}" data-cancel="${escrow.CancelAfter || ''}">
-                   <div class="d-flex justify-content-between mb-1 small">
-                     <span class="fw-semibold text-secondary progress-label" style="font-size: 0.72rem;">${progressLabel}</span>
-                     <span class="text-secondary fw-semibold progress-text" style="font-size: 0.7rem;">${progressPct}%</span>
-                   </div>
-                   <div class="progress" style="height: 6px;">
-                     <div class="progress-bar ${progressColor}" role="progressbar" style="width: ${progressPct}%" aria-valuenow="${progressPct}" aria-valuemin="0" aria-valuemax="100"></div>
-                   </div>
-                 </div>
-               `;
-             })()}
+                const progress = window.calculateEscrowProgress(escrow.FinishAfter, escrow.CreationTime, escrow.CancelAfter);
+                return `
+                  <div class="escrow-progress-container" data-finish="${escrow.FinishAfter || ''}" data-cancel="${escrow.CancelAfter || ''}" data-creation="${escrow.CreationTime || ''}">
+                    <div class="d-flex justify-content-between mb-1 small">
+                      <span class="fw-semibold text-secondary progress-label" style="font-size: 0.72rem;">${progress.label}</span>
+                      <span class="text-secondary fw-semibold progress-text" style="font-size: 0.7rem;">${progress.pct}%</span>
+                    </div>
+                    <div class="progress" style="height: 6px;">
+                      <div class="progress-bar ${progress.color}" role="progressbar" style="width: ${progress.pct}%" aria-valuenow="${progress.pct}" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                  </div>
+                `;
+              })()}
            </div>
         </div>
         <div class="text-end" style="font-size:0.75rem;">
