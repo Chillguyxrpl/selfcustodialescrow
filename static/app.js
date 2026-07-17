@@ -1,10 +1,23 @@
 window.escrowViewType = localStorage.getItem('escrowViewType') || 'grid';
 
-// --- Theme Toggle ---
+// --- Theme Toggle & Synchronization ---
 const storedTheme = localStorage.getItem('theme');
 const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 let currentTheme = storedTheme || (prefersDark ? 'dark' : 'light');
-document.documentElement.setAttribute('data-bs-theme', currentTheme);
+
+// Listen for system theme changes and sync dynamically if user hasn't explicitly set a preference
+if (window.matchMedia) {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem('theme')) {
+      currentTheme = e.matches ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-bs-theme', currentTheme);
+      const toggleBtn = document.getElementById('themeToggleBtn');
+      if (toggleBtn) {
+        toggleBtn.innerHTML = currentTheme === 'dark' ? '<i class="bi bi-sun-fill"></i> Theme' : '<i class="bi bi-moon-stars-fill"></i> Theme';
+      }
+    }
+  });
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   const toggleBtn = document.getElementById('themeToggleBtn');
@@ -130,74 +143,11 @@ async function fetchUserTrustlines(account) {
 }
 
 function populateTrustlinesDropdown(selectEl, curInput, issInput) {
-  if (!selectEl) return;
-  selectEl.innerHTML = '';
-  selectEl.disabled = false;
-  
-  const parentContainer = selectEl.closest('.trustlines-dropdown-container');
-  
-  // If no wallet connected, hide the container completely
-  if (!window.connectedAccount) {
-    if (parentContainer) parentContainer.style.display = 'none';
-    return;
-  }
-
-  if (parentContainer) parentContainer.style.display = 'block';
-
-  // If currently loading
-  if (window.loadingTrustlines) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = '⏳ Loading trustlines from ledger...';
-    selectEl.appendChild(opt);
-    selectEl.disabled = true;
-    return;
-  }
-
-  const trustlines = window.userTrustlines || [];
-  if (trustlines.length === 0) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = '❌ No active trustlines found for this account';
-    selectEl.appendChild(opt);
-    selectEl.disabled = true;
-    return;
-  }
-
-  // Add default option
-  const placeholder = document.createElement('option');
-  placeholder.value = '';
-  placeholder.textContent = 'Select a token from your trustlines...';
-  selectEl.appendChild(placeholder);
-
-  trustlines.forEach(tl => {
-    const opt = document.createElement('option');
-    opt.value = JSON.stringify({ currency: tl.currency, issuer: tl.issuer });
-    
-    const currency = tl.currency;
-    const decodedVal = decodeCurrencyCode(currency);
-    const balanceFormatted = parseFloat(tl.balance).toLocaleString(undefined, {maximumFractionDigits: 6});
-    const limitFormatted = parseFloat(tl.limit).toLocaleString(undefined, {maximumFractionDigits: 6});
-    
-    if (currency.startsWith('03') && currency.length === 40) {
-      opt.textContent = `AMM Liquidity Pool Token (LP) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
-    } else {
-      const hasDecodedName = decodedVal !== currency;
-      if (!hasDecodedName) {
-        opt.textContent = `${currency} (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
-      } else {
-        const tokenName = tl.name && tl.name !== decodedVal ? tl.name : decodedVal;
-        opt.textContent = `${tokenName} (${decodedVal}) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
-      }
-    }
-    selectEl.appendChild(opt);
-  });
-
-  // When selected, auto-fill inputs
-  selectEl.addEventListener('change', () => {
-    if (!selectEl.value) return;
-    try {
-      const { currency, issuer } = JSON.parse(selectEl.value);
+  populateGenericTrustlineDropdown({
+    selectId: selectEl.id,
+    containerSelector: selectEl.closest('.trustlines-dropdown-container') ? '.trustlines-dropdown-container' : null,
+    onSelect: (data) => {
+      const { currency, issuer } = data;
       if (curInput && issInput) {
         curInput.value = currency;
         issInput.value = issuer;
@@ -206,8 +156,6 @@ function populateTrustlinesDropdown(selectEl, curInput, issInput) {
         curInput.dispatchEvent(new Event('blur', { bubbles: true }));
         issInput.dispatchEvent(new Event('blur', { bubbles: true }));
       }
-    } catch (e) {
-      console.error('Error selecting trustline:', e);
     }
   });
 }
@@ -220,17 +168,13 @@ function updateFormTrustlinesDropdowns() {
       const curInput = tokenGroup.querySelector('#field_AMOUNT_CURRENCY');
       const issInput = tokenGroup.querySelector('#field_AMOUNT_ISSUER');
       populateTrustlinesDropdown(selectEl, curInput, issInput);
-/**
- * Generic function to populate a <select> element with a user's trustlines.
- * @param {object} options - Configuration options.
- * @param {string} options.selectId - The ID of the <select> element.
- * @param {string} [options.containerSelector] - A selector for a parent container to hide if the user is not connected.
- * @param {string} [options.placeholderText] - The text for the default, unselected option.
- * @param {boolean} [options.allowCustom] - If true, adds a "-- Custom Token Search --" option.
- * @param {function} [options.onSelect] - A callback function to execute when a trustline is selected. It receives the selected token object { currency, issuer }.
- * @param {function} [options.optionValueBuilder] - A function to build the value for each <option>. Defaults to JSON.stringify({ currency, issuer }).
- * @param {function} [options.optionTextBuilder] - A function to build the text content for each <option>.
- */
+    }
+  });
+  populateMemeTokenSelect();
+  populateVaultTrustlinesDropdown();
+  populateCrowdhdlTokenSelect();
+}
+
 function populateGenericTrustlineDropdown({
   selectId,
   containerSelector,
@@ -247,11 +191,6 @@ function populateGenericTrustlineDropdown({
     if (currency.startsWith('03') && currency.length === 40) {
       return `AMM Liquidity Pool Token (LP) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
     }
-  });
-  populateMemeTokenSelect();
-  populateVaultTrustlinesDropdown();
-  populateCrowdhdlTokenSelect();
-}
     const hasDecodedName = decodedVal !== currency;
     if (!hasDecodedName) {
       return `${currency} (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
@@ -262,18 +201,11 @@ function populateGenericTrustlineDropdown({
 }) {
   const selectEl = document.getElementById(selectId);
   if (!selectEl) return;
-
-function populateMemeTokenSelect() {
-  const selectEl = document.getElementById('memeTokenSelect');
-  if (!selectEl) return;
   selectEl.innerHTML = '';
   selectEl.disabled = false;
 
-  const btnSearch = document.getElementById('btnMemeTokenSearch');
-  if (btnSearch) btnSearch.style.display = 'none';
   const parentContainer = containerSelector ? selectEl.closest(containerSelector) : null;
 
-  // If no wallet connected
   if (!window.connectedAccount) {
     if (parentContainer) parentContainer.style.display = 'none';
     const opt = document.createElement('option');
@@ -284,7 +216,6 @@ function populateMemeTokenSelect() {
     return;
   }
 
-  // If currently loading
   if (parentContainer) parentContainer.style.display = 'block';
 
   if (window.loadingTrustlines) {
@@ -292,7 +223,6 @@ function populateMemeTokenSelect() {
     opt.value = '';
     opt.textContent = '⏳ Loading trustlines from ledger...';
     selectEl.appendChild(opt);
-    selectEl.innerHTML = '<option value="">⏳ Loading trustlines from ledger...</option>';
     selectEl.disabled = true;
     return;
   }
@@ -303,84 +233,31 @@ function populateMemeTokenSelect() {
     opt.value = '';
     opt.textContent = '❌ No active trustlines found for this account';
     selectEl.appendChild(opt);
-    
-    // Still allow custom token search even if they have no trustlines
-    const customOpt = document.createElement('option');
-    customOpt.value = 'custom';
-    customOpt.textContent = '-- Custom Token Search --';
-    selectEl.appendChild(customOpt);
-    selectEl.disabled = false;
+
+    if (allowCustom) {
+      const customOpt = document.createElement('option');
+      customOpt.value = 'custom';
+      customOpt.textContent = '-- Custom Token Search --';
+      selectEl.appendChild(customOpt);
+      selectEl.disabled = false;
+    } else {
+      selectEl.disabled = true;
+    }
     return;
   }
-  selectEl.innerHTML = `<option value="">${placeholderText}</option>`;
 
-  // Add default option
   const placeholder = document.createElement('option');
   placeholder.value = '';
-  placeholder.textContent = 'Select a token from your trustlines...';
+  placeholder.textContent = placeholderText;
   selectEl.appendChild(placeholder);
 
   trustlines.forEach(tl => {
     const opt = document.createElement('option');
-    opt.value = JSON.stringify({ currency: tl.currency, decoded_currency: tl.decoded_currency, issuer: tl.issuer });
-    
-    const currency = tl.currency;
-    const decodedVal = decodeCurrencyCode(currency);
-    const balanceFormatted = parseFloat(tl.balance).toLocaleString(undefined, {maximumFractionDigits: 6});
-    const limitFormatted = parseFloat(tl.limit).toLocaleString(undefined, {maximumFractionDigits: 6});
-    
-    if (currency.startsWith('03') && currency.length === 40) {
-      opt.textContent = `AMM Liquidity Pool Token (LP) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
-    } else {
-      const hasDecodedName = decodedVal !== currency;
-      if (!hasDecodedName) {
-        opt.textContent = `${currency} (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
-      } else {
-        const tokenName = tl.name && tl.name !== decodedVal ? tl.name : decodedVal;
-        opt.textContent = `${tokenName} (${decodedVal}) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
-      }
-    }
     opt.value = optionValueBuilder(tl);
     opt.textContent = optionTextBuilder(tl);
     selectEl.appendChild(opt);
   });
 
-  // Add custom search option at the end
-  const customOpt = document.createElement('option');
-  customOpt.value = 'custom';
-  customOpt.textContent = '-- Custom Token Search --';
-  selectEl.appendChild(customOpt);
-}
-
-function populateVaultTrustlinesDropdown() {
-  const selectEl = document.getElementById('vaultTrustlineSelect');
-  if (!selectEl) return;
-  selectEl.innerHTML = '';
-  selectEl.disabled = false;
-
-  const parentContainer = selectEl.closest('.vault-trustlines-container');
-  
-  // If no wallet connected, hide the container completely
-  if (!window.connectedAccount) {
-    if (parentContainer) parentContainer.style.display = 'none';
-    return;
-  if (trustlines.length === 0) {
-    selectEl.innerHTML = '<option value="">❌ No active trustlines found for this account</option>';
-    if (!allowCustom) {
-      selectEl.disabled = true;
-    }
-  }
-
-  if (parentContainer) parentContainer.style.display = 'block';
-
-  // If currently loading
-  if (window.loadingTrustlines) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = '⏳ Loading trustlines from ledger...';
-    selectEl.appendChild(opt);
-    selectEl.disabled = true;
-    return;
   if (allowCustom) {
     const customOpt = document.createElement('option');
     customOpt.value = 'custom';
@@ -388,84 +265,51 @@ function populateVaultTrustlinesDropdown() {
     selectEl.appendChild(customOpt);
   }
 
-  const trustlines = window.userTrustlines || [];
-  if (trustlines.length === 0) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = '❌ No active trustlines found for this account';
-    selectEl.appendChild(opt);
-    selectEl.disabled = true;
-    return;
-  if (onSelect) {
-    // Clone and replace to avoid multiple event listeners
-    const newSelect = selectEl.cloneNode(true);
-    selectEl.parentNode.replaceChild(newSelect, selectEl);
-    newSelect.addEventListener('change', () => {
-      if (!newSelect.value || newSelect.value === 'custom') {
-        if (newSelect.value === 'custom' && window.activeTokenTarget) {
-            const modalEl = document.getElementById('tokenSearchModal');
-            if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
-        }
-        return;
-      }
-      try {
-        const data = JSON.parse(newSelect.value);
-        onSelect(data);
-      } catch (e) {
-        console.error('Error selecting trustline:', e);
-      }
-    });
-  }
-}
-
-  // Add default option
-  const placeholder = document.createElement('option');
-  placeholder.value = '';
-  placeholder.textContent = 'Select a token from your trustlines...';
-  selectEl.appendChild(placeholder);
-
-  trustlines.forEach(tl => {
-    const opt = document.createElement('option');
-    opt.value = JSON.stringify({ currency: tl.currency, issuer: tl.issuer });
-    
-    const currency = tl.currency;
-    const decodedVal = decodeCurrencyCode(currency);
-    const balanceFormatted = parseFloat(tl.balance).toLocaleString(undefined, {maximumFractionDigits: 6});
-    const limitFormatted = parseFloat(tl.limit).toLocaleString(undefined, {maximumFractionDigits: 6});
-    
-    if (currency.startsWith('03') && currency.length === 40) {
-      opt.textContent = `AMM Liquidity Pool Token (LP) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
-    } else {
-      const hasDecodedName = decodedVal !== currency;
-      if (!hasDecodedName) {
-        opt.textContent = `${currency} (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
-      } else {
-        const tokenName = tl.name && tl.name !== decodedVal ? tl.name : decodedVal;
-        opt.textContent = `${tokenName} (${decodedVal}) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
-      }
-function updateFormTrustlinesDropdowns() {
-  const dropdowns = document.querySelectorAll('.trustlines-select');
-  dropdowns.forEach(selectEl => {
-    const tokenGroup = selectEl.closest('.token-group');
-    if (tokenGroup) {
-      const curInput = tokenGroup.querySelector('#field_AMOUNT_CURRENCY');
-      const issInput = tokenGroup.querySelector('#field_AMOUNT_ISSUER');
-      populateTrustlinesDropdown(selectEl, curInput, issInput);
-    }
-    selectEl.appendChild(opt);
-  });
-  populateMemeTokenSelect();
-  populateVaultTrustlinesDropdown();
-  populateCrowdhdlTokenSelect();
-}
-
-  // When selected, auto-fill inputs
+  // Clone to remove previous listeners
   const newSelect = selectEl.cloneNode(true);
   selectEl.parentNode.replaceChild(newSelect, selectEl);
+
   newSelect.addEventListener('change', () => {
     if (!newSelect.value) return;
-    try {
-      const { currency, issuer } = JSON.parse(newSelect.value);
+    if (onSelect) {
+      if (newSelect.value === 'custom') {
+        onSelect({ currency: 'custom', issuer: 'custom' });
+      } else {
+        try {
+          const parsed = JSON.parse(newSelect.value);
+          onSelect(parsed);
+        } catch (e) {
+          console.error('Error parsing selected option:', e);
+        }
+      }
+    }
+  });
+}
+
+function populateMemeTokenSelect() {
+  populateGenericTrustlineDropdown({
+    selectId: 'memeTokenSelect',
+    allowCustom: true,
+    optionValueBuilder: (tl) => JSON.stringify({ currency: tl.currency, decoded_currency: tl.decoded_currency || decodeCurrencyCode(tl.currency), issuer: tl.issuer }),
+    onSelect: (data) => {
+      if (data.currency === 'custom') {
+        const modalEl = document.getElementById('tokenSearchModal');
+        if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        return;
+      }
+      const { currency, issuer } = data;
+      document.getElementById('memeTokenIssuer').value = issuer;
+      document.getElementById('memeTokenHex').value = formatCurrencyCode(currency);
+    }
+  });
+}
+
+function populateVaultTrustlinesDropdown() {
+  populateGenericTrustlineDropdown({
+    selectId: 'vaultTrustlineSelect',
+    containerSelector: '.vault-trustlines-container',
+    onSelect: (data) => {
+      const { currency, issuer } = data;
       const curInput = document.getElementById('vaultCurrency');
       const issInput = document.getElementById('vaultIssuer');
       if (curInput && issInput) {
@@ -474,111 +318,16 @@ function updateFormTrustlinesDropdowns() {
         curInput.dispatchEvent(new Event('input', { bubbles: true }));
         issInput.dispatchEvent(new Event('input', { bubbles: true }));
       }
-    } catch (e) {
-      console.error('Error selecting vault trustline:', e);
     }
   });
-function populateMemeTokenSelect() {
-    populateGenericTrustlineDropdown({
-        selectId: 'memeTokenSelect',
-        allowCustom: true,
-        optionValueBuilder: (tl) => JSON.stringify({ currency: tl.currency, decoded_currency: tl.decoded_currency, issuer: tl.issuer }),
-        onSelect: (data) => {
-            const { currency, issuer } = data;
-            document.getElementById('memeTokenIssuer').value = issuer;
-            document.getElementById('memeTokenHex').value = formatCurrencyCode(currency);
-        }
-    });
-}
-
-function populateVaultTrustlinesDropdown() {
-    populateGenericTrustlineDropdown({
-        selectId: 'vaultTrustlineSelect',
-        containerSelector: '.vault-trustlines-container',
-        onSelect: (data) => {
-            const { currency, issuer } = data;
-            const curInput = document.getElementById('vaultCurrency');
-            const issInput = document.getElementById('vaultIssuer');
-            if (curInput && issInput) {
-                curInput.value = decodeCurrencyCode(currency);
-                issInput.value = issuer;
-                curInput.dispatchEvent(new Event('input', { bubbles: true }));
-                issInput.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        }
-    });
 }
 
 function populateCrowdhdlTokenSelect() {
-  const selectEl = document.getElementById('crowdhdlTokenSelect');
-  if (!selectEl) return;
-  selectEl.innerHTML = '';
-  selectEl.disabled = false;
-
-  const parentContainer = selectEl.closest('.crowdhdl-trustlines-container');
-  
-  // If no wallet connected, hide the container completely
-  if (!window.connectedAccount) {
-    if (parentContainer) parentContainer.style.display = 'none';
-    return;
-  }
-
-  if (parentContainer) parentContainer.style.display = 'block';
-
-  // If currently loading
-  if (window.loadingTrustlines) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = '⏳ Loading trustlines from ledger...';
-    selectEl.appendChild(opt);
-    selectEl.disabled = true;
-    return;
-  }
-
-  const trustlines = window.userTrustlines || [];
-  if (trustlines.length === 0) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = '❌ No active trustlines found for this account';
-    selectEl.appendChild(opt);
-    selectEl.disabled = true;
-    return;
-  }
-
-  // Add default option
-  const placeholder = document.createElement('option');
-  placeholder.value = '';
-  placeholder.textContent = 'Select a token from your trustlines...';
-  selectEl.appendChild(placeholder);
-
-  trustlines.forEach(tl => {
-    const opt = document.createElement('option');
-    opt.value = JSON.stringify({ currency: tl.currency, decoded_currency: tl.decoded_currency, issuer: tl.issuer });
-    
-    const currency = tl.currency;
-    const decodedVal = decodeCurrencyCode(currency);
-    const balanceFormatted = parseFloat(tl.balance).toLocaleString(undefined, {maximumFractionDigits: 6});
-    const limitFormatted = parseFloat(tl.limit).toLocaleString(undefined, {maximumFractionDigits: 6});
-    
-    if (currency.startsWith('03') && currency.length === 40) {
-      opt.textContent = `AMM Liquidity Pool Token (LP) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
-    } else {
-      const hasDecodedName = decodedVal !== currency;
-      if (!hasDecodedName) {
-        opt.textContent = `${currency} (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
-      } else {
-        const tokenName = tl.name && tl.name !== decodedVal ? tl.name : decodedVal;
-        opt.textContent = `${tokenName} (${decodedVal}) (Balance: ${balanceFormatted} • Limit: ${limitFormatted})`;
-      }
-    }
-    selectEl.appendChild(opt);
+  populateGenericTrustlineDropdown({
+    selectId: 'crowdhdlTokenSelect',
+    containerSelector: '.crowdhdl-trustlines-container',
+    optionValueBuilder: (tl) => JSON.stringify({ currency: tl.currency, decoded_currency: tl.decoded_currency || decodeCurrencyCode(tl.currency), issuer: tl.issuer })
   });
-    populateGenericTrustlineDropdown({
-        selectId: 'crowdhdlTokenSelect',
-        containerSelector: '.crowdhdl-trustlines-container',
-        optionValueBuilder: (tl) => JSON.stringify({ currency: tl.currency, decoded_currency: tl.decoded_currency, issuer: tl.issuer })
-        // No onSelect needed as it's for scanning, not filling inputs
-    });
 }
 
 function updateSelectedTokenBadge(tokenGroup, name, domain, icon) {
@@ -1939,7 +1688,27 @@ function renderFields() {
       }
     });
 
-    col.appendChild(input);
+    if (['ACCOUNT', 'DESTINATION', 'OWNER', 'ISSUER'].some(key => sanitizeId(key) === input.id)) {
+      const group = document.createElement('div');
+      group.className = 'input-group';
+      group.appendChild(input);
+      
+      const bookBtn = document.createElement('button');
+      bookBtn.type = 'button';
+      bookBtn.className = 'btn btn-outline-secondary';
+      bookBtn.title = 'Address Book';
+      bookBtn.innerHTML = '<i class="bi bi-book"></i>';
+      bookBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (typeof window.openAddressBookForInput === 'function') {
+          window.openAddressBookForInput(input);
+        }
+      });
+      group.appendChild(bookBtn);
+      col.appendChild(group);
+    } else {
+      col.appendChild(input);
+    }
     appendToStep(k, col);
   }
 
@@ -1959,7 +1728,14 @@ function renderFields() {
   function showValidCheck(inputEl) {
     removeValidCheck(inputEl);
     const check = document.createElement('span');
-    check.className = 'valid-check position-absolute top-0 end-0 mt-2 me-2 text-success';
+    if (inputEl.parentNode && inputEl.parentNode.classList.contains('input-group')) {
+      check.className = 'valid-check position-absolute top-0 text-success';
+      check.style.right = '45px';
+      check.style.marginTop = '8px';
+      check.style.zIndex = '5';
+    } else {
+      check.className = 'valid-check position-absolute top-0 end-0 mt-2 me-2 text-success';
+    }
     check.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
     inputEl.parentNode.appendChild(check);
   }
@@ -2420,6 +2196,10 @@ function showAlert(msg, type = 'info', isHtml = false, action = null) {
   }
 
   // Show toast with Bootstrap or fallback
+  if (type === 'success' && typeof window.triggerSuccessConfetti === 'function') {
+    window.triggerSuccessConfetti();
+  }
+
   if (window.bootstrap && window.bootstrap.Toast) {
     const toast = new window.bootstrap.Toast(toastEl, { delay: delayMs });
     toast.show();
@@ -2636,13 +2416,28 @@ function updatePollingStatusMessage(state, details, isHtml = false) {
   payloadPollingStatusEl.innerHTML = '';
   const badge = document.createElement('span');
   badge.className = 'status-badge ' + (state === 'signed' ? 'status-success' : isFinalPayloadState(state) ? 'status-warning' : 'status-info');
-  const icon = document.createElement('i');
-  icon.className = state === 'signed' ? 'bi bi-check-circle' : isFinalPayloadState(state) ? 'bi bi-exclamation-circle' : 'bi bi-hourglass-split';
-  badge.appendChild(icon);
-  const text = document.createElement('span');
-  text.style.marginLeft = '8px';
-  text.textContent = `Payload state: ${state}`;
-  badge.appendChild(text);
+  
+  if (state === 'signed') {
+    badge.innerHTML = `
+      <svg class="success-checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" style="width:20px; height:20px; vertical-align:middle; display:inline-block;">
+        <circle class="success-checkmark__circle" cx="26" cy="26" r="25" fill="none" style="stroke:#198754; stroke-width:4;"/>
+        <path class="success-checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" style="stroke:#198754; stroke-width:4; stroke-linecap:round;"/>
+      </svg>
+      <span style="margin-left: 8px; vertical-align:middle;">Payload state: signed</span>
+    `;
+    if (typeof window.triggerSuccessConfetti === 'function') {
+      window.triggerSuccessConfetti();
+    }
+  } else {
+    const icon = document.createElement('i');
+    icon.className = isFinalPayloadState(state) ? 'bi bi-exclamation-circle' : 'bi bi-hourglass-split';
+    badge.appendChild(icon);
+    const text = document.createElement('span');
+    text.style.marginLeft = '8px';
+    text.textContent = `Payload state: ${state}`;
+    badge.appendChild(text);
+  }
+  
   payloadPollingStatusEl.appendChild(badge);
   if (details) {
     const detailsText = document.createElement('div');
@@ -3774,7 +3569,11 @@ async function updateDashboard(account) {
 
   // 2. Fetch and render active escrows on dashboard
   if (dashEscrowsContainer) {
-    dashEscrowsContainer.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Scanning ledger...</div>';
+    if (typeof window.showTableShimmerLoading === 'function') {
+      window.showTableShimmerLoading(dashEscrowsContainer);
+    } else {
+      dashEscrowsContainer.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Scanning ledger...</div>';
+    }
     try {
       const escrows = await fetchActiveEscrows(account);
       dashEscrowsContainer.innerHTML = '';
@@ -4521,7 +4320,11 @@ function startLiveCountdownTimer() {
 async function renderActiveEscrows(account, container, preFetchedEscrows = null) {
   if (!container) return;
 
-  container.innerHTML = '<div class="text-center my-3"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Scanning ledger...</div>';
+  if (typeof window.showTableShimmerLoading === 'function') {
+    window.showTableShimmerLoading(container);
+  } else {
+    container.innerHTML = '<div class="text-center my-3"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Scanning ledger...</div>';
+  }
   
   let escrows = preFetchedEscrows || await fetchActiveEscrows(account);
   container.innerHTML = '';
@@ -5362,8 +5165,9 @@ if (startVaultBtnEl) {
       stopVault();
       return;
     }
-    
-    const vaultAddress = wallet.address;
+    if (wallet.address !== vaultAddress) {
+      logVault(`⚠️ [WARNING] Seed address (${wallet.address}) does not match selected Vault address (${vaultAddress}).`);
+    }
     logVault(`Vault Account: ${vaultAddress}`);
     logVault(`Target Release Time: ${new Date(releaseUnix * 1000).toLocaleString()}`);
 
@@ -7056,5 +6860,390 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     }
+  };
+
+  // --- UX ENHANCEMENT 2: RPC Node Latency & Status Monitor ---
+  window.activeRpcUrl = document.getElementById('vaultRpc') ? document.getElementById('vaultRpc').value.trim() : 'wss://s1.ripple.com';
+  if (!window.activeRpcUrl) window.activeRpcUrl = 'wss://s1.ripple.com';
+  
+  function checkRpcNodeLatency(url) {
+    return new Promise((resolve) => {
+      const start = performance.now();
+      let done = false;
+      let socket;
+      
+      const timeout = setTimeout(() => {
+        if (!done) {
+          done = true;
+          try { socket.close(); } catch(e){}
+          resolve(-1);
+        }
+      }, 2500);
+      
+      try {
+        socket = new WebSocket(url);
+        socket.onopen = () => {
+          if (!done) {
+            done = true;
+            clearTimeout(timeout);
+            const latency = Math.round(performance.now() - start);
+            try { socket.close(); } catch(e){}
+            resolve(latency);
+          }
+        };
+        socket.onerror = () => {
+          if (!done) {
+            done = true;
+            clearTimeout(timeout);
+            try { socket.close(); } catch(e){}
+            resolve(-1);
+          }
+        };
+      } catch (err) {
+        if (!done) {
+          done = true;
+          clearTimeout(timeout);
+          resolve(-1);
+        }
+      }
+    });
+  }
+
+  async function updateActiveRpcLatencyDisplay() {
+    const dot = document.getElementById('rpcStatusDot');
+    const mobileDot = document.getElementById('mobileRpcDot');
+    const text = document.getElementById('rpcActiveNodeText');
+    const badge = document.getElementById('rpcLatencyText');
+    const mobileBadge = document.getElementById('mobileRpcLatency');
+    
+    if (text) text.textContent = window.activeRpcUrl;
+    
+    const latency = await checkRpcNodeLatency(window.activeRpcUrl);
+    
+    const setStatus = (colorClass, textValue, latencyText) => {
+      if (dot) {
+        dot.className = `status-dot ${colorClass}`;
+      }
+      if (mobileDot) {
+        mobileDot.className = `status-dot ${colorClass}`;
+      }
+      if (badge) {
+        badge.textContent = latencyText;
+        badge.className = `badge ${colorClass === 'bg-success' ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'} font-monospace`;
+      }
+      if (mobileBadge) {
+        mobileBadge.textContent = latencyText;
+        mobileBadge.className = `small font-monospace ${colorClass === 'bg-success' ? 'text-success' : 'text-danger'}`;
+      }
+    };
+    
+    if (latency >= 0) {
+      setStatus('bg-success', window.activeRpcUrl, `${latency} ms`);
+    } else {
+      setStatus('bg-danger', window.activeRpcUrl, 'Offline');
+    }
+  }
+
+  // Monitor all nodes in modal when opened
+  const rpcModalEl = document.getElementById('rpcSelectorModal');
+  if (rpcModalEl) {
+    rpcModalEl.addEventListener('show.bs.modal', async () => {
+      const items = document.querySelectorAll('#rpcNodeList button[data-rpc]');
+      items.forEach(async item => {
+        const url = item.getAttribute('data-rpc');
+        const badge = item.querySelector('.ping-badge');
+        if (badge) {
+          badge.textContent = 'pinging...';
+          badge.className = 'badge bg-warning-subtle text-warning font-monospace ping-badge';
+          const latency = await checkRpcNodeLatency(url);
+          if (latency >= 0) {
+            badge.textContent = `${latency} ms`;
+            badge.className = 'badge bg-success-subtle text-success font-monospace ping-badge';
+          } else {
+            badge.textContent = 'Offline';
+            badge.className = 'badge bg-danger-subtle text-danger font-monospace ping-badge';
+          }
+        }
+      });
+    });
+  }
+
+  // Switch node on click
+  document.querySelectorAll('#rpcNodeList button[data-rpc]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const rpc = btn.getAttribute('data-rpc');
+      selectRpcNode(rpc);
+      const modal = bootstrap.Modal.getInstance(rpcModalEl);
+      if (modal) modal.hide();
+    });
+  });
+
+  const saveCustomBtn = document.getElementById('saveCustomRpcBtn');
+  if (saveCustomBtn) {
+    saveCustomBtn.addEventListener('click', () => {
+      const customVal = document.getElementById('customRpcInput').value.trim();
+      if (customVal.startsWith('wss://') || customVal.startsWith('ws://')) {
+        selectRpcNode(customVal);
+        const modal = bootstrap.Modal.getInstance(rpcModalEl);
+        if (modal) modal.hide();
+        document.getElementById('customRpcInput').value = '';
+      } else {
+        alert('Please enter a valid WebSocket URL (starting with wss:// or ws://)');
+      }
+    });
+  }
+
+  function selectRpcNode(rpcUrl) {
+    window.activeRpcUrl = rpcUrl;
+    const vaultRpcSelect = document.getElementById('vaultRpc');
+    if (vaultRpcSelect) {
+      let optExists = false;
+      for (let i = 0; i < vaultRpcSelect.options.length; i++) {
+        if (vaultRpcSelect.options[i].value === rpcUrl) {
+          vaultRpcSelect.selectedIndex = i;
+          optExists = true;
+          break;
+        }
+      }
+      if (!optExists) {
+        const opt = document.createElement('option');
+        opt.value = rpcUrl;
+        opt.textContent = `Custom (${rpcUrl})`;
+        vaultRpcSelect.appendChild(opt);
+        vaultRpcSelect.value = rpcUrl;
+      }
+      vaultRpcSelect.dispatchEvent(new Event('change'));
+    }
+    updateActiveRpcLatencyDisplay();
+    showAlert(`Switched primary RPC node to ${rpcUrl}`, 'success');
+  }
+
+  updateActiveRpcLatencyDisplay();
+  setInterval(updateActiveRpcLatencyDisplay, 15000);
+
+  // --- UX ENHANCEMENT 3: Shimmer Skeletons ---
+  window.showTableShimmerLoading = function(container, count = 4) {
+    if (!container) return;
+    let rowsHtml = '';
+    for (let i = 0; i < count; i++) {
+      rowsHtml += `
+        <tr>
+          <td><div class="shimmer-placeholder" style="width: 65px; height: 18px;"></div></td>
+          <td><div class="shimmer-placeholder" style="width: 95px; height: 22px;"></div></td>
+          <td><div class="shimmer-placeholder" style="width: 75px; height: 18px;"></div></td>
+          <td><div class="shimmer-placeholder" style="width: 135px; height: 14px;"></div></td>
+          <td><div class="shimmer-placeholder" style="width: 115px; height: 22px;"></div></td>
+          <td class="text-end"><div class="shimmer-placeholder" style="width: 85px; height: 30px;"></div></td>
+        </tr>
+      `;
+    }
+    container.innerHTML = `
+      <div class="table-responsive">
+        <table class="table align-middle table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Asset</th>
+              <th>Locked</th>
+              <th>Type</th>
+              <th>Counterparty</th>
+              <th>Unlock Progress</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  // --- UX ENHANCEMENT 4: Reserve Calculator triggers ---
+  const templateSelectEl = document.getElementById('templateSelect');
+  if (templateSelectEl) {
+    templateSelectEl.addEventListener('change', () => {
+      const name = templateSelectEl.value;
+      const calcWidget = document.getElementById('reserveCalculatorWidget');
+      if (calcWidget) {
+        if (name) {
+          calcWidget.style.display = 'block';
+          
+          let reserveVal = '0.0 XRP';
+          let refundVal = '0.0 XRP (0%)';
+          let isRefundable = false;
+          
+          if (name === 'escrow_create' || name === 'lock_meme' || name.includes('escrow')) {
+            reserveVal = '2.0 XRP';
+            refundVal = '2.0 XRP (100% Refundable)';
+            isRefundable = true;
+          } else if (name.includes('trustline') || name.includes('trust')) {
+            reserveVal = '2.0 XRP';
+            refundVal = '2.0 XRP (100% Refundable on delete)';
+            isRefundable = true;
+          } else {
+            reserveVal = '0.0 XRP';
+            refundVal = '0.0 XRP (0% - transient state)';
+          }
+          
+          document.getElementById('calcReserveFee').textContent = reserveVal;
+          const refundEl = document.getElementById('calcRefundableReserve');
+          refundEl.textContent = refundVal;
+          if (isRefundable) {
+            refundEl.className = 'col-5 text-end font-monospace text-primary fw-bold';
+          } else {
+            refundEl.className = 'col-5 text-end font-monospace text-secondary';
+          }
+        } else {
+          calcWidget.style.display = 'none';
+        }
+      }
+    });
+  }
+
+  // --- UX ENHANCEMENT 5: Address Book ---
+  window.activeAddressBookInputTarget = null;
+  window.openAddressBookForInput = function(inputEl) {
+    window.activeAddressBookInputTarget = inputEl;
+    const modalEl = document.getElementById('addressBookModal');
+    if (modalEl) {
+      window.loadAddressBookList();
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      modal.show();
+    }
+  };
+
+  window.loadAddressBookList = function() {
+    const listContainer = document.getElementById('addressBookList');
+    if (!listContainer) return;
+    listContainer.innerHTML = '';
+    
+    let contacts = [];
+    try {
+      contacts = JSON.parse(localStorage.getItem('xrplAddressBook') || '[]');
+    } catch(e) {}
+    
+    // Add default contacts if list is empty
+    if (contacts.length === 0) {
+      contacts = [];
+      if (window.connectedAccount) {
+        contacts.push({ label: 'Connected Account', address: window.connectedAccount });
+      }
+      contacts.push({ label: 'Ripple Testnet Faucet', address: 'rPT1S4GmqZBFwED52Qb1d4GQnhh62A7Tmt' });
+      localStorage.setItem('xrplAddressBook', JSON.stringify(contacts));
+    }
+    
+    contacts.forEach((c, idx) => {
+      const item = document.createElement('div');
+      item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2';
+      item.style.cursor = 'pointer';
+      
+      const info = document.createElement('div');
+      info.className = 'd-flex flex-column text-truncate';
+      info.style.maxWidth = '80%';
+      info.innerHTML = `
+        <strong class="text-dark-emphasis small">${escapeHtml(c.label)}</strong>
+        <span class="font-monospace text-muted text-truncate" style="font-size: 0.72rem;">${c.address}</span>
+      `;
+      
+      // Clicking the contact fills the input
+      info.addEventListener('click', () => {
+        if (window.activeAddressBookInputTarget) {
+          window.activeAddressBookInputTarget.value = c.address;
+          window.activeAddressBookInputTarget.dispatchEvent(new Event('input', { bubbles: true }));
+          window.activeAddressBookInputTarget.dispatchEvent(new Event('blur', { bubbles: true }));
+        }
+        const modalEl = document.getElementById('addressBookModal');
+        if (modalEl) {
+          const modal = bootstrap.Modal.getInstance(modalEl);
+          if (modal) modal.hide();
+        }
+      });
+      
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn btn-xs btn-outline-danger border-0 p-1';
+      delBtn.innerHTML = '<i class="bi bi-trash-fill"></i>';
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        window.deleteContact(idx);
+      });
+      
+      item.appendChild(info);
+      item.appendChild(delBtn);
+      listContainer.appendChild(item);
+    });
+  };
+
+  window.deleteContact = function(index) {
+    let contacts = [];
+    try {
+      contacts = JSON.parse(localStorage.getItem('xrplAddressBook') || '[]');
+    } catch(e) {}
+    contacts.splice(index, 1);
+    localStorage.setItem('xrplAddressBook', JSON.stringify(contacts));
+    window.loadAddressBookList();
+  };
+
+  const saveContactBtn = document.getElementById('saveContactBtn');
+  if (saveContactBtn) {
+    saveContactBtn.addEventListener('click', () => {
+      const label = document.getElementById('contactLabelInput').value.trim();
+      const address = document.getElementById('contactAddressInput').value.trim();
+      
+      if (!label || !address) {
+        alert('Please fill out both Label and Address fields.');
+        return;
+      }
+      
+      if (!isValidXRPLAddressFormat(address)) {
+        alert('Invalid XRPL Address format.');
+        return;
+      }
+      
+      let contacts = [];
+      try {
+        contacts = JSON.parse(localStorage.getItem('xrplAddressBook') || '[]');
+      } catch(e) {}
+      
+      contacts.push({ label, address });
+      localStorage.setItem('xrplAddressBook', JSON.stringify(contacts));
+      
+      document.getElementById('contactLabelInput').value = '';
+      document.getElementById('contactAddressInput').value = '';
+      
+      window.loadAddressBookList();
+      showAlert(`Contact "${label}" added to address book.`, 'success');
+    });
+  }
+
+  // --- UX ENHANCEMENT 6: Micro-interaction Success States (Confetti Burst) ---
+  window.triggerSuccessConfetti = function() {
+    if (typeof confetti !== 'function') return;
+    
+    // Emerald & Electric Blue themed confetti
+    const end = Date.now() + 1200;
+    const colors = ['#10b981', '#3b82f6', '#fbbf24', '#ffffff'];
+
+    (function frame() {
+      confetti({
+        particleCount: 4,
+        angle: 60,
+        spread: 60,
+        origin: { x: 0, y: 0.8 },
+        colors: colors
+      });
+      confetti({
+        particleCount: 4,
+        angle: 120,
+        spread: 60,
+        origin: { x: 1, y: 0.8 },
+        colors: colors
+      });
+
+      if (Date.now() < end) {
+        requestAnimationFrame(frame);
+      }
+    }());
   };
 });
