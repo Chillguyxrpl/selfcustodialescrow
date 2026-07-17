@@ -987,8 +987,6 @@ def get_ledger_time(request: Request):
             raise HTTPException(status_code=r.status_code, detail="XRPL node ledger request failed.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/sysinfo")
 def get_sys_info():
