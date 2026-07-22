@@ -7198,6 +7198,124 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // --- Enterprise Hub Interactive Logic ---
+  const btnGenerateVesting = document.getElementById('btnGenerateEntVestingBatch');
+  if (btnGenerateVesting) {
+    btnGenerateVesting.addEventListener('click', () => {
+      const dest = (document.getElementById('entVestingDestination').value || '').trim();
+      const curr = (document.getElementById('entVestingCurrency').value || '').trim();
+      const iss = (document.getElementById('entVestingIssuer').value || '').trim();
+      const totalAmt = parseFloat(document.getElementById('entVestingTotalAmount').value);
+      const tranches = parseInt(document.getElementById('entVestingTranches').value, 10);
+      const cliffMonths = parseInt(document.getElementById('entVestingCliffMonths').value, 10) || 0;
+      const intervalDays = parseInt(document.getElementById('entVestingIntervalDays').value, 10) || 30;
+
+      const previewContainer = document.getElementById('entVestingPreview');
+      if (!dest || !curr || !iss || isNaN(totalAmt) || totalAmt <= 0) {
+        showAlert('Please fill in all required fields with valid values.', 'warning');
+        return;
+      }
+
+      if (!isValidXRPLAddressFormat(dest) || !isValidXRPLAddressFormat(iss)) {
+        showAlert('Invalid XRPL Address format for Destination or Issuer.', 'error');
+        return;
+      }
+
+      const amountPerTranche = (totalAmt / tranches).toFixed(6);
+      const nowXrpl = Math.floor(Date.now() / 1000) - 946684800; // XRPL Epoch
+      const cliffSecs = cliffMonths * 30 * 86400;
+      const intervalSecs = intervalDays * 86400;
+
+      let trancheItemsHtml = '';
+      for (let i = 0; i < tranches; i++) {
+        const finishAfter = nowXrpl + cliffSecs + (i * intervalSecs);
+        const cancelAfter = finishAfter + (180 * 86400); // 180 days margin
+        const unlockDate = new Date((finishAfter + 946684800) * 1000).toLocaleDateString();
+
+        trancheItemsHtml += `
+          <div class="p-2 mb-2 border rounded bg-white font-monospace small">
+            <div class="d-flex justify-content-between text-dark fw-bold">
+              <span>Tranche #${i + 1}: ${amountPerTranche} ${curr}</span>
+              <span class="text-primary">${unlockDate}</span>
+            </div>
+            <div class="text-muted text-truncate" style="font-size: 0.72rem;">
+              FinishAfter: ${finishAfter} | CancelAfter: ${cancelAfter}
+            </div>
+          </div>
+        `;
+      }
+
+      previewContainer.innerHTML = `
+        <div class="alert alert-success py-2 mb-3 small">
+          <i class="bi bi-layers-fill me-1"></i> <strong>XLS-56d Batch Prepared!</strong> Bundling ${tranches} native token escrows into 1 signature.
+        </div>
+        <div class="mb-2 fw-bold text-dark">Destination: ${shortenAddress(dest)}</div>
+        <div style="max-height: 250px; overflow-y: auto;">
+          ${trancheItemsHtml}
+        </div>
+      `;
+
+      showAlert(`Generated ${tranches}-tranche enterprise vesting batch preview!`, 'success');
+    });
+  }
+
+  const btnAuditIssuer = document.getElementById('btnAuditIssuerFlags');
+  if (btnAuditIssuer) {
+    btnAuditIssuer.addEventListener('click', async () => {
+      const issuer = (document.getElementById('entAuditIssuerInput').value || '').trim();
+      const resultsContainer = document.getElementById('entAuditResults');
+
+      if (!isValidXRPLAddressFormat(issuer)) {
+        showAlert('Invalid XRPL Issuer Address.', 'error');
+        return;
+      }
+
+      btnAuditIssuer.disabled = true;
+      btnAuditIssuer.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Auditing...';
+      resultsContainer.style.display = 'block';
+      resultsContainer.innerHTML = '<div class="text-center text-muted py-2"><span class="spinner-border spinner-border-sm me-2"></span> Querying XRPL ledger...</div>';
+
+      try {
+        const resp = await fetch(`/account_info/${encodeURIComponent(issuer)}`);
+        const data = await resp.json();
+        
+        btnAuditIssuer.disabled = false;
+        btnAuditIssuer.innerHTML = '<i class="bi bi-search"></i> Audit Issuer';
+
+        if (!resp.ok) {
+          throw new Error(data.detail || 'Failed to fetch issuer info.');
+        }
+
+        const flags = data.account_data?.Flags || 0;
+        const lsfRequireAuth = Boolean(flags & 0x00040000);
+        const lsfGlobalFreeze = Boolean(flags & 0x00400000);
+        const lsfAllowTrustLineClawback = Boolean(flags & 0x80000000);
+
+        resultsContainer.innerHTML = `
+          <h6 class="fw-bold mb-2 text-dark"><i class="bi bi-shield-check text-success me-1"></i> Ledger Flags for ${shortenAddress(issuer)}</h6>
+          <ul class="list-group list-group-flush small">
+            <li class="list-group-item d-flex justify-content-between align-items-center bg-transparent">
+              <span>XLS-73 AMM / TrustLine Clawback</span>
+              <span class="badge ${lsfAllowTrustLineClawback ? 'bg-success' : 'bg-secondary'}">${lsfAllowTrustLineClawback ? 'Enabled' : 'Disabled'}</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center bg-transparent">
+              <span>Require Auth (lsfRequireAuth)</span>
+              <span class="badge ${lsfRequireAuth ? 'bg-info' : 'bg-secondary'}">${lsfRequireAuth ? 'Yes' : 'No'}</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center bg-transparent">
+              <span>Global Freeze Status</span>
+              <span class="badge ${lsfGlobalFreeze ? 'bg-danger' : 'bg-success'}">${lsfGlobalFreeze ? 'FROZEN' : 'Active (No Freeze)'}</span>
+            </li>
+          </ul>
+        `;
+      } catch (err) {
+        btnAuditIssuer.disabled = false;
+        btnAuditIssuer.innerHTML = '<i class="bi bi-search"></i> Audit Issuer';
+        resultsContainer.innerHTML = `<div class="alert alert-danger mb-0 small"><i class="bi bi-exclamation-octagon me-1"></i> Audit failed: ${escapeHtml(err.message || String(err))}</div>`;
+      }
+    });
+  }
+
   // --- UX ENHANCEMENT 6: Micro-interaction Success States (Confetti Burst) ---
   window.triggerSuccessConfetti = function() {
     if (typeof confetti !== 'function') return;

@@ -684,6 +684,9 @@
           <button class="nav-link" id="tab-vault-btn" data-bs-toggle="pill" data-bs-target="#pane-vault" type="button" role="tab" aria-controls="pane-vault" aria-selected="false">
             <i class="bi bi-safe2"></i> Auto-Sweep Vault
           </button>
+          <button class="nav-link" id="tab-enterprise-btn" data-bs-toggle="pill" data-bs-target="#pane-enterprise" type="button" role="tab" aria-controls="pane-enterprise" aria-selected="false">
+            <i class="bi bi-building-gear text-info"></i> Enterprise Hub
+          </button>
           <button class="nav-link" id="tab-meme-btn" data-bs-toggle="pill" data-bs-target="#pane-meme" type="button" role="tab" aria-controls="pane-meme" aria-selected="false">
             <i class="bi bi-rocket-takeoff text-warning"></i> Meme Lockup
           </button>
@@ -1463,6 +1466,256 @@
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+
+          <!-- Pane 8: Enterprise Hub -->
+          <div class="tab-pane fade" id="pane-enterprise" role="tabpanel" aria-labelledby="tab-enterprise-btn">
+            
+            <div class="card border border-info-subtle shadow-sm mb-4">
+              <div class="card-header bg-info-subtle d-flex justify-content-between align-items-center py-3">
+                <div>
+                  <h4 class="mb-0 fw-bold text-info-emphasis">
+                    <i class="bi bi-building-gear text-info me-2"></i> Enterprise Tokenization & Institutional Escrow Hub
+                  </h4>
+                  <span class="small text-secondary">Institutional-grade asset escrow, multi-token vesting, and XLS standards management.</span>
+                </div>
+                <span class="badge bg-info text-dark font-monospace fs-6 px-3 py-2">XLS-85 & XLS-56 Compliant</span>
+              </div>
+              <div class="card-body">
+                
+                <!-- Enterprise Standards Status Highlights -->
+                <div class="row g-3 mb-4">
+                  <div class="col-md-3">
+                    <div class="border rounded p-3 bg-body-tertiary h-100">
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge bg-success-subtle text-success border border-success-subtle">Active Mainnet</span>
+                        <i class="bi bi-coin text-success fs-4"></i>
+                      </div>
+                      <h6 class="fw-bold mb-1">XLS-85d Token Escrow</h6>
+                      <p class="small text-muted mb-0">Native ledger escrows for IOUs, Stablecoins & Multi-Purpose Tokens (MPTs).</p>
+                    </div>
+                  </div>
+                  <div class="col-md-3">
+                    <div class="border rounded p-3 bg-body-tertiary h-100">
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge bg-success-subtle text-success border border-success-subtle">Active Mainnet</span>
+                        <i class="bi bi-layers-half text-primary fs-4"></i>
+                      </div>
+                      <h6 class="fw-bold mb-1">XLS-56d Batch Bundling</h6>
+                      <p class="small text-muted mb-0">Atomic execution of up to 8 bundled escrows & token setups in 1 signature.</p>
+                    </div>
+                  </div>
+                  <div class="col-md-3">
+                    <div class="border rounded p-3 bg-body-tertiary h-100">
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Standards Roadmap</span>
+                        <i class="bi bi-cpu text-warning fs-4"></i>
+                      </div>
+                      <h6 class="fw-bold mb-1">XLS-100 Smart Escrow</h6>
+                      <p class="small text-muted mb-0">WASM-powered milestone releases & oracle price-trigger contracts.</p>
+                    </div>
+                  </div>
+                  <div class="col-md-3">
+                    <div class="border rounded p-3 bg-body-tertiary h-100">
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">Standards Roadmap</span>
+                        <i class="bi bi-incognito text-info fs-4"></i>
+                      </div>
+                      <h6 class="fw-bold mb-1">XLS-96 Confidential Vault</h6>
+                      <p class="small text-muted mb-0">Homomorphic EC-ElGamal balance encryption & zero-knowledge transfer proofs.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Enterprise Sub-Tabs -->
+                <ul class="nav nav-tabs mb-4" id="enterpriseSubTabs" role="tablist">
+                  <li class="nav-item" role="presentation">
+                    <button class="nav-link active fw-bold" id="ent-vesting-tab" data-bs-toggle="tab" data-bs-target="#ent-vesting-pane" type="button" role="tab" aria-controls="ent-vesting-pane" aria-selected="true">
+                      <i class="bi bi-safe text-primary me-1"></i> Institutional Token Vesting
+                    </button>
+                  </li>
+                  <li class="nav-item" role="presentation">
+                    <button class="nav-link fw-bold" id="ent-compliance-tab" data-bs-toggle="tab" data-bs-target="#ent-compliance-pane" type="button" role="tab" aria-controls="ent-compliance-pane" aria-selected="false">
+                      <i class="bi bi-shield-check text-success me-1"></i> RWA Compliance & AMM Clawback (XLS-73)
+                    </button>
+                  </li>
+                  <li class="nav-item" role="presentation">
+                    <button class="nav-link fw-bold" id="ent-smart-tab" data-bs-toggle="tab" data-bs-target="#ent-smart-pane" type="button" role="tab" aria-controls="ent-smart-pane" aria-selected="false">
+                      <i class="bi bi-code-slash text-warning me-1"></i> Programmable WASM Escrows (XLS-100)
+                    </button>
+                  </li>
+                </ul>
+
+                <div class="tab-content" id="enterpriseSubTabContent">
+                  
+                  <!-- Enterprise Sub-Pane 1: Institutional Token Vesting -->
+                  <div class="tab-pane fade show active" id="ent-vesting-pane" role="tabpanel" aria-labelledby="ent-vesting-tab">
+                    <div class="row">
+                      <div class="col-md-7">
+                        <h5 class="fw-bold mb-3"><i class="bi bi-diagram-3 text-primary me-2"></i> Create Multi-Tranche Enterprise Vesting Schedule</h5>
+                        <p class="small text-muted mb-3">
+                          Generate structured token vesting schedules for team allocations, investor cliff periods, or institutional RWA distribution using native XRPL token escrows.
+                        </p>
+
+                        <form id="enterpriseVestingForm">
+                          <div class="mb-3">
+                            <label class="form-label fw-bold small">Beneficiary Account Address (Destination)</label>
+                            <input type="text" id="entVestingDestination" class="form-control font-monospace" placeholder="r..." required>
+                          </div>
+
+                          <div class="row g-2 mb-3">
+                            <div class="col-md-4">
+                              <label class="form-label fw-bold small">Token Currency</label>
+                              <input type="text" id="entVestingCurrency" class="form-control text-uppercase" placeholder="RLUSD, USD, or Hex" required>
+                            </div>
+                            <div class="col-md-8">
+                              <label class="form-label fw-bold small">Token Issuer Address</label>
+                              <input type="text" id="entVestingIssuer" class="form-control font-monospace" placeholder="rIssuerAddress..." required>
+                            </div>
+                          </div>
+
+                          <div class="row g-2 mb-3">
+                            <div class="col-md-6">
+                              <label class="form-label fw-bold small">Total Vesting Amount</label>
+                              <input type="number" id="entVestingTotalAmount" class="form-control" placeholder="100000" step="any" required>
+                            </div>
+                            <div class="col-md-6">
+                              <label class="form-label fw-bold small">Tranches (Number of Escrows)</label>
+                              <select id="entVestingTranches" class="form-select">
+                                <option value="2">2 Tranches (50% / 50%)</option>
+                                <option value="4" selected>4 Tranches (Quarterly 25%)</option>
+                                <option value="6">6 Tranches (Bi-Monthly)</option>
+                                <option value="8">8 Tranches (Atomic Batch Limit)</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div class="row g-2 mb-4">
+                            <div class="col-md-6">
+                              <label class="form-label fw-bold small">Cliff Duration (Months)</label>
+                              <input type="number" id="entVestingCliffMonths" class="form-control" value="6" min="0">
+                            </div>
+                            <div class="col-md-6">
+                              <label class="form-label fw-bold small">Tranche Interval (Days)</label>
+                              <input type="number" id="entVestingIntervalDays" class="form-control" value="90" min="1">
+                            </div>
+                          </div>
+
+                          <div class="d-grid">
+                            <button type="button" id="btnGenerateEntVestingBatch" class="btn btn-primary fw-bold py-2">
+                              <i class="bi bi-layers-fill me-1"></i> Generate Atomic XLS-56d Vesting Batch Payload
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+
+                      <div class="col-md-5">
+                        <div class="border rounded p-3 bg-light h-100">
+                          <h6 class="fw-bold mb-3"><i class="bi bi-journal-text text-info me-2"></i> Vesting Batch Preview</h6>
+                          <div id="entVestingPreview" class="small text-muted">
+                            Fill out the form to generate a preview of your multi-tranche XLS-85d escrow batch payload.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Enterprise Sub-Pane 2: RWA Compliance & AMM Clawback (XLS-73) -->
+                  <div class="tab-pane fade" id="ent-compliance-pane" role="tabpanel" aria-labelledby="ent-compliance-tab">
+                    <div class="row">
+                      <div class="col-md-6">
+                        <div class="card border shadow-sm">
+                          <div class="card-header bg-body-secondary fw-bold">
+                            <i class="bi bi-shield-lock text-success me-2"></i> Asset Compliance & Issuer Controls Audit
+                          </div>
+                          <div class="card-body">
+                            <p class="small text-muted">
+                              Scan any token issuer account to verify regulatory flags including <code>lsfAllowTrustLineClawback</code> (XLS-73), <code>lsfRequireAuth</code>, and global freeze status.
+                            </p>
+
+                            <div class="mb-3">
+                              <label class="form-label fw-bold small">Token Issuer Address</label>
+                              <div class="input-group">
+                                <input type="text" id="entAuditIssuerInput" class="form-control font-monospace" placeholder="rIssuerAddress...">
+                                <button class="btn btn-success" id="btnAuditIssuerFlags">
+                                  <i class="bi bi-search"></i> Audit Issuer
+                                </button>
+                              </div>
+                            </div>
+
+                            <div id="entAuditResults" class="p-3 border rounded bg-light" style="display: none;">
+                              <!-- Dynamic audit details populated by JS -->
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="col-md-6">
+                        <div class="card border shadow-sm">
+                          <div class="card-header bg-body-secondary fw-bold">
+                            <i class="bi bi-file-earmark-lock text-primary me-2"></i> Regulatory Clawback Compliance (XLS-73)
+                          </div>
+                          <div class="card-body small text-muted">
+                            <p>
+                              Under XLS-73 (AMMClawback), token issuers can execute compliance-mandated recovery of tokenized real-world assets locked inside Automated Market Maker liquidity pools or escrows.
+                            </p>
+                            <div class="alert alert-info mb-0">
+                              <i class="bi bi-info-circle-fill me-1"></i> <strong>Institutional Protection:</strong> Ensure your issuer account sets the <code>lsfAllowTrustLineClawback</code> flag before initial token issuance to maintain regulatory compliance for security tokens.
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Enterprise Sub-Pane 3: WASM Smart Escrows (XLS-100) -->
+                  <div class="tab-pane fade" id="ent-smart-pane" role="tabpanel" aria-labelledby="ent-smart-tab">
+                    <div class="alert alert-warning border-warning-subtle">
+                      <div class="d-flex align-items-center">
+                        <i class="bi bi-exclamation-triangle-fill text-warning fs-3 me-3"></i>
+                        <div>
+                          <h6 class="fw-bold mb-1">XLS-100 Smart Escrow Standard Preview</h6>
+                          <p class="small mb-0">
+                            WASM-powered smart escrow execution allows programmable milestone payments and oracle price-triggers directly on the XRPL.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="row g-3">
+                      <div class="col-md-4">
+                        <div class="card border shadow-sm h-100">
+                          <div class="card-body">
+                            <h6 class="fw-bold text-primary"><i class="bi bi-graph-up-arrow me-2"></i> Oracle Price Threshold Trigger</h6>
+                            <p class="small text-muted mb-3">Releases escrowed tokens automatically when an XRPL Price Oracle feed hits a target threshold.</p>
+                            <span class="badge bg-secondary">Draft Spec</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="card border shadow-sm h-100">
+                          <div class="card-body">
+                            <h6 class="fw-bold text-success"><i class="bi bi-check2-circle me-2"></i> Multi-Oracle Consensus Lock</h6>
+                            <p class="small text-muted mb-3">Requires 2-of-3 independent oracles to sign off before releasing institutional funds.</p>
+                            <span class="badge bg-secondary">Draft Spec</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="card border shadow-sm h-100">
+                          <div class="card-body">
+                            <h6 class="fw-bold text-info"><i class="bi bi-box-seam me-2"></i> RWA Milestone Release</h6>
+                            <p class="small text-muted mb-3">Unlocks funds sequentially as off-chain verification proofs are posted on-chain.</p>
+                            <span class="badge bg-secondary">Draft Spec</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
               </div>
             </div>
 
