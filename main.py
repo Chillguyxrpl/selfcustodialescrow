@@ -656,15 +656,23 @@ def get_payload_history(request: Request, account: str = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def query_xrpl_node(rpc_req: dict) -> dict:
-    """Queries the primary XRPL_RPC. Falls back to the alternative network if the account is not found or request fails."""
+def query_xrpl_node(rpc_req: dict, request: Optional[Request] = None) -> dict:
+    """Queries the primary XRPL_RPC or custom header node. Falls back to the alternative network if request fails."""
+    custom_node = None
+    if request:
+        custom_node = request.headers.get("x-custom-xrpl-node") or request.headers.get("X-Custom-XRPL-Node")
+        if custom_node:
+            custom_node = custom_node.strip()
+
+    target_primary_rpc = custom_node if (custom_node and custom_node.startswith("http")) else XRPL_RPC
+
     # Determine fallback RPC URL based on primary XRPL_RPC config
-    is_default_testnet = "testnet" in XRPL_RPC.lower() or "altnet" in XRPL_RPC.lower()
+    is_default_testnet = "testnet" in target_primary_rpc.lower() or "altnet" in target_primary_rpc.lower()
     alt_rpc = "https://s1.ripple.com:51234/" if is_default_testnet else "https://s.altnet.rippletest.net:51234/"
     
-    # Try primary RPC node first
+    # Try primary/custom RPC node first
     try:
-        r = session.post(XRPL_RPC, json=rpc_req, timeout=10)
+        r = session.post(target_primary_rpc, json=rpc_req, timeout=10)
         if r.status_code == 200:
             data = r.json()
             result = data.get("result", {})
@@ -683,7 +691,7 @@ def query_xrpl_node(rpc_req: dict) -> dict:
         pass
 
     # Return actNotFound as default if it failed on both
-    return {"error": "actNotFound", "error_message": "Account not found on either network node."}
+    return {"error": "actNotFound", "error_message": "Account not found on target network node."}
 
 
 @app.get("/check_trustline/{destination}/{issuer}/{currency}")
@@ -833,8 +841,8 @@ def get_active_escrows(request: Request, account: str):
         ]
     }
     try:
-        res_obj = query_xrpl_node(rpc_req_obj)
-        res_tx = query_xrpl_node(rpc_req_tx)
+        res_obj = query_xrpl_node(rpc_req_obj, request=request)
+        res_tx = query_xrpl_node(rpc_req_tx, request=request)
         
         if "error" in res_obj:
             if res_obj.get("error") == "actNotFound":

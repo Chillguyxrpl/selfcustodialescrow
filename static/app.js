@@ -1,4 +1,21 @@
 window.escrowViewType = localStorage.getItem('escrowViewType') || 'grid';
+window.activeRpcUrl = localStorage.getItem('activeRpcUrl') || null;
+
+// --- Custom Enterprise Node Header Interceptor ---
+const originalFetch = window.fetch;
+window.fetch = function(resource, init = {}) {
+  if (window.activeRpcUrl && typeof resource === 'string' && resource.startsWith('/')) {
+    init.headers = init.headers || {};
+    if (init.headers instanceof Headers) {
+      init.headers.append('X-Custom-XRPL-Node', window.activeRpcUrl);
+    } else if (Array.isArray(init.headers)) {
+      init.headers.push(['X-Custom-XRPL-Node', window.activeRpcUrl]);
+    } else {
+      init.headers['X-Custom-XRPL-Node'] = window.activeRpcUrl;
+    }
+  }
+  return originalFetch.call(this, resource, init);
+};
 
 // --- Theme Toggle & Synchronization ---
 const storedTheme = localStorage.getItem('theme');
@@ -6976,6 +6993,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function selectRpcNode(rpcUrl) {
     window.activeRpcUrl = rpcUrl;
+    if (rpcUrl) {
+      localStorage.setItem('activeRpcUrl', rpcUrl);
+    } else {
+      localStorage.removeItem('activeRpcUrl');
+    }
     const vaultRpcSelect = document.getElementById('vaultRpc');
     if (vaultRpcSelect) {
       let optExists = false;
@@ -7226,11 +7248,32 @@ document.addEventListener('DOMContentLoaded', () => {
       const cliffSecs = cliffMonths * 30 * 86400;
       const intervalSecs = intervalDays * 86400;
 
+      window.activePreparedBatchPayload = {
+        TransactionType: 'Batch',
+        Account: window.connectedAccount || 'rACCOUNT_PLACEHOLDER',
+        Transactions: []
+      };
+
       let trancheItemsHtml = '';
       for (let i = 0; i < tranches; i++) {
         const finishAfter = nowXrpl + cliffSecs + (i * intervalSecs);
         const cancelAfter = finishAfter + (180 * 86400); // 180 days margin
         const unlockDate = new Date((finishAfter + 946684800) * 1000).toLocaleDateString();
+
+        window.activePreparedBatchPayload.Transactions.push({
+          Transaction: {
+            TransactionType: 'EscrowCreate',
+            Account: window.connectedAccount || 'rACCOUNT_PLACEHOLDER',
+            Destination: dest,
+            Amount: {
+              currency: curr,
+              issuer: iss,
+              value: amountPerTranche
+            },
+            FinishAfter: finishAfter,
+            CancelAfter: cancelAfter
+          }
+        });
 
         trancheItemsHtml += `
           <div class="p-2 mb-2 border rounded bg-white font-monospace small">
@@ -7250,12 +7293,29 @@ document.addEventListener('DOMContentLoaded', () => {
           <i class="bi bi-layers-fill me-1"></i> <strong>XLS-56d Batch Prepared!</strong> Bundling ${tranches} native token escrows into 1 signature.
         </div>
         <div class="mb-2 fw-bold text-dark">Destination: ${shortenAddress(dest)}</div>
-        <div style="max-height: 250px; overflow-y: auto;">
+        <div style="max-height: 220px; overflow-y: auto;">
           ${trancheItemsHtml}
         </div>
       `;
 
+      const makerActions = document.getElementById('entMakerCheckerActions');
+      if (makerActions) makerActions.style.display = 'block';
+
       showAlert(`Generated ${tranches}-tranche enterprise vesting batch preview!`, 'success');
+    });
+  }
+
+  const btnShareDraft = document.getElementById('btnShareDraftPayload');
+  if (btnShareDraft) {
+    btnShareDraft.addEventListener('click', () => {
+      if (!window.activePreparedBatchPayload) {
+        showAlert('No active batch payload prepared yet.', 'warning');
+        return;
+      }
+      const jsonStr = JSON.stringify(window.activePreparedBatchPayload);
+      const encoded = btoa(encodeURIComponent(jsonStr));
+      const shareUrl = `${window.location.origin}${window.location.pathname}?draft_batch=${encoded}#pane-enterprise`;
+      copyToClipboard(shareUrl, 'Shareable Maker-Checker draft link copied to clipboard!');
     });
   }
 

@@ -1611,10 +1611,23 @@
                       </div>
 
                       <div class="col-md-5">
-                        <div class="border rounded p-3 bg-light h-100">
-                          <h6 class="fw-bold mb-3"><i class="bi bi-journal-text text-info me-2"></i> Vesting Batch Preview</h6>
-                          <div id="entVestingPreview" class="small text-muted">
-                            Fill out the form to generate a preview of your multi-tranche XLS-85d escrow batch payload.
+                        <div class="border rounded p-3 bg-light h-100 d-flex flex-column justify-content-between">
+                          <div>
+                            <h6 class="fw-bold mb-3"><i class="bi bi-journal-text text-info me-2"></i> Vesting Batch Preview</h6>
+                            <div id="entVestingPreview" class="small text-muted">
+                              Fill out the form to generate a preview of your multi-tranche XLS-85d escrow batch payload.
+                            </div>
+                          </div>
+                          <div id="entMakerCheckerActions" class="mt-3 pt-3 border-top" style="display: none;">
+                            <label class="form-label fw-bold small text-dark"><i class="bi bi-people-fill text-primary me-1"></i> Maker-Checker Governance</label>
+                            <div class="d-flex gap-2">
+                              <button type="button" id="btnShareDraftPayload" class="btn btn-outline-primary btn-sm flex-fill fw-bold">
+                                <i class="bi bi-share-fill me-1"></i> Copy Shareable Draft Link
+                              </button>
+                              <button type="button" id="btnSignDraftPayload" class="btn btn-success btn-sm flex-fill fw-bold">
+                                <i class="bi bi-shield-check me-1"></i> Push to Xaman
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
