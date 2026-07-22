@@ -944,37 +944,78 @@ def get_active_escrows(request: Request, account: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/enterprise/erp_export/{account}")
+def export_erp_report(request: Request, account: str, format: Optional[str] = "netsuite"):
+    """Export formatted financial journal entries for ERP systems (NetSuite, QuickBooks, Xero)."""
+    account = account.strip()
+    if not is_valid_xrpl_address(account):
+        raise HTTPException(status_code=400, detail="Invalid account address format.")
+
+    rpc_req = {
+        "method": "account_tx",
+        "params": [{"account": account, "ledger_index_min": -1, "ledger_index_max": -1, "limit": 400}]
+    }
+    
+    res = query_xrpl_node(rpc_req, request=request)
+    if "error" in res:
+        raise HTTPException(status_code=400, detail=res.get("error_message", "Account not found."))
+
+    txs = res.get("transactions", [])
+    csv_rows = []
+
+    if format.lower() == "quickbooks":
+        csv_rows.append(["Date", "Transaction Type", "Account/Address", "Asset", "Amount", "XRPL Ledger Index", "TxHash"])
+    else:
+        # NetSuite Journal Entry format
+        csv_rows.append(["ExternalId", "Date", "Memo", "Account", "Debit", "Credit", "Currency", "TransactionHash"])
+
+    for item in txs:
+        tx = item.get("tx") or item.get("transaction") or {}
+        tx_type = tx.get("TransactionType")
+        if tx_type not in ("EscrowCreate", "EscrowFinish", "EscrowCancel", "Payment"):
+            continue
+
+        tx_hash = tx.get("hash") or item.get("hash") or ""
+        date_num = tx.get("date") or item.get("date")
+        date_str = datetime.utcfromtimestamp((date_num + 946684800)).strftime('%Y-%m-%d %H:%M:%S') if date_num else ""
+        
+        amt = tx.get("Amount")
+        currency = "XRP"
+        val_str = "0"
+        if isinstance(amt, str):
+            val_str = str(float(amt) / 1000000.0)
+            currency = "XRP"
+        elif isinstance(amt, dict):
+            val_str = str(amt.get("value", "0"))
+            currency = str(amt.get("currency", "Token"))
+
+        if format.lower() == "quickbooks":
+            csv_rows.append([date_str, tx_type, tx.get("Destination") or tx.get("Account"), currency, val_str, tx.get("ledger_index", ""), tx_hash])
+        else:
+            is_outgoing = tx.get("Account") == account
+            debit = "0" if is_outgoing else val_str
+            credit = val_str if is_outgoing else "0"
+            csv_rows.append([tx_hash[:16], date_str, f"XRPL {tx_type}", account, debit, credit, currency, tx_hash])
+
+    output = "\n".join([",".join([f'"{str(cell)}"' for cell in row]) for row in csv_rows])
+    return Response(content=output, media_type="text/csv", headers={"Content-Disposition": f"attachment; filename=ERP_{format}_{account[:8]}.csv"})
+
+
 @app.get("/account_tx/{account}")
 def get_account_tx(request: Request, account: str, limit: Optional[int] = 400):
     """Fetch recent transaction history for a given account from the XRPL."""
     account = account.strip()
     if not is_valid_xrpl_address(account):
-        raise HTTPException(status_code=400, detail="Invalid account address format. Must be a valid XRPL r-address with a correct checksum.")
-    
+        raise HTTPException(status_code=400, detail="Invalid account address format.")
+
     rpc_req = {
         "method": "account_tx",
-        "params": [
-            {
-                "account": account,
-                "ledger_index_min": -1,
-                "ledger_index_max": -1,
-                "limit": limit
-            }
-        ]
+        "params": [{"account": account, "ledger_index_min": -1, "ledger_index_max": -1, "limit": limit}]
     }
-    try:
-        r = session.post(XRPL_RPC, json=rpc_req, timeout=15)
-        if r.status_code == 200:
-            res = r.json().get("result", {})
-            if "error" in res:
-                raise HTTPException(status_code=400, detail=res.get("error_message", res.get("error")))
-            return res
-        else:
-            raise HTTPException(status_code=r.status_code, detail="XRPL node account_tx request failed.")
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=str(e))
+    res = query_xrpl_node(rpc_req, request=request)
+    if "error" in res:
+        raise HTTPException(status_code=400, detail=res.get("error_message", "Account not found."))
+    return res
 
 @app.get("/ledger_time")
 def get_ledger_time(request: Request):

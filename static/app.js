@@ -7376,6 +7376,23 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const btnDownloadErp = document.getElementById('btnDownloadErpCsv');
+  if (btnDownloadErp) {
+    btnDownloadErp.addEventListener('click', () => {
+      const account = (document.getElementById('entErpAccountInput').value || window.connectedAccount || '').trim();
+      const format = (document.getElementById('entErpFormatSelect').value || 'netsuite').trim();
+
+      if (!isValidXRPLAddressFormat(account)) {
+        showAlert('Please enter a valid XRPL Account Address to export.', 'warning');
+        return;
+      }
+
+      const exportUrl = `/enterprise/erp_export/${encodeURIComponent(account)}?format=${encodeURIComponent(format)}`;
+      window.open(exportUrl, '_blank');
+      showAlert(`Downloading ${format.toUpperCase()} financial journal CSV for ${shortenAddress(account)}...`, 'success');
+    });
+  }
+
   // --- UX ENHANCEMENT 6: Micro-interaction Success States (Confetti Burst) ---
   window.triggerSuccessConfetti = function() {
     if (typeof confetti !== 'function') return;

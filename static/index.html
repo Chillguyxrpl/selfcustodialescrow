@@ -1541,6 +1541,11 @@
                     </button>
                   </li>
                   <li class="nav-item" role="presentation">
+                    <button class="nav-link fw-bold" id="ent-erp-tab" data-bs-toggle="tab" data-bs-target="#ent-erp-pane" type="button" role="tab" aria-controls="ent-erp-pane" aria-selected="false">
+                      <i class="bi bi-file-earmark-spreadsheet text-info me-1"></i> ERP Financial Reporting (NetSuite/QuickBooks)
+                    </button>
+                  </li>
+                  <li class="nav-item" role="presentation">
                     <button class="nav-link fw-bold" id="ent-smart-tab" data-bs-toggle="tab" data-bs-target="#ent-smart-pane" type="button" role="tab" aria-controls="ent-smart-pane" aria-selected="false">
                       <i class="bi bi-code-slash text-warning me-1"></i> Programmable WASM Escrows (XLS-100)
                     </button>
@@ -1676,6 +1681,49 @@
                             <div class="alert alert-info mb-0">
                               <i class="bi bi-info-circle-fill me-1"></i> <strong>Institutional Protection:</strong> Ensure your issuer account sets the <code>lsfAllowTrustLineClawback</code> flag before initial token issuance to maintain regulatory compliance for security tokens.
                             </div>
+                          </div>
+                        </div>
+                  <!-- Enterprise Sub-Pane 3: ERP Financial Reporting (NetSuite/QuickBooks) -->
+                  <div class="tab-pane fade" id="ent-erp-pane" role="tabpanel" aria-labelledby="ent-erp-tab">
+                    <div class="row">
+                      <div class="col-md-7">
+                        <h5 class="fw-bold mb-3"><i class="bi bi-file-earmark-spreadsheet text-info me-2"></i> Export Journal Entries for Corporate Accounting</h5>
+                        <p class="small text-muted mb-3">
+                          Generate pre-formatted journal entry CSV files ready for import into enterprise ERP systems (NetSuite, QuickBooks, Xero).
+                        </p>
+
+                        <div class="card border shadow-sm p-3 mb-3 bg-light">
+                          <div class="mb-3">
+                            <label class="form-label fw-bold small">XRPL Account Address to Export</label>
+                            <input type="text" id="entErpAccountInput" class="form-control font-monospace" placeholder="rAccountAddress...">
+                          </div>
+
+                          <div class="mb-3">
+                            <label class="form-label fw-bold small">Target ERP System Format</label>
+                            <select id="entErpFormatSelect" class="form-select">
+                              <option value="netsuite" selected>Oracle NetSuite (Journal Entry CSV)</option>
+                              <option value="quickbooks">QuickBooks Online / Desktop CSV</option>
+                            </select>
+                          </div>
+
+                          <div class="d-grid">
+                            <button type="button" id="btnDownloadErpCsv" class="btn btn-info text-white fw-bold">
+                              <i class="bi bi-download me-1"></i> Download Formatted ERP Journal CSV
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="col-md-5">
+                        <div class="card border shadow-sm h-100">
+                          <div class="card-header bg-body-secondary fw-bold">
+                            <i class="bi bi-info-circle text-primary me-2"></i> Supported ERP Formats
+                          </div>
+                          <div class="card-body small text-muted">
+                            <ul class="list-group list-group-flush mb-0">
+                              <li class="list-group-item bg-transparent"><strong>Oracle NetSuite:</strong> Maps debits, credits, external IDs, and ledger hashes for automated audit trails.</li>
+                              <li class="list-group-item bg-transparent"><strong>QuickBooks:</strong> Includes date timestamps, transaction types, asset amounts, and ledger index references.</li>
+                            </ul>
                           </div>
                         </div>
                       </div>
