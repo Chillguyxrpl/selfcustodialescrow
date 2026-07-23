@@ -1,5 +1,5 @@
 """
-Independent Integration Test Suite for Just a Chill Escrow Application.
+Independent Integration Test Suite for Boundless Vault Application.
 Runs without third-party test framework dependencies, testing FastAPI routes,
 Pydantic V2 validations, XLS-85d Token Escrow models, XLS-56d Batching,
 and ERP Financial Reporting.

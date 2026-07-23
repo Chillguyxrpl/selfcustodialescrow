@@ -1,4 +1,4 @@
-# 🛡️ Self-Custodial Escrow Builder for XRPL & Xaman
+# 🛡️ Boundless Vault: Self-Custodial XRPL & Xaman Platform
 
 A fast, secure, and intuitive web application to build, manage, and deploy self-custodial escrows and multi-purpose token transactions on the XRP Ledger using the Xaman (formerly XUMM) wallet.
 

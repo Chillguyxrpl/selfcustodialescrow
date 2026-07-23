@@ -178,7 +178,7 @@ def init_db():
 
 init_db()
 
-app = FastAPI(title="Self-Custodial Escrow (XUMM)")
+app = FastAPI(title="Boundless Vault (XUMM)")
 
 app.add_middleware(
     CORSMiddleware,

@@ -3504,7 +3504,7 @@ document.getElementById('buildPayload').addEventListener('click', async (e) => {
       txjson: txjson,
       user_token: window.connectedUserToken,
       custom_meta: {
-        identifier: 'Self-Custodial Escrow',
+        identifier: 'Boundless Vault',
         instruction: 'Please review and sign this newly created transaction.'
       }
     };

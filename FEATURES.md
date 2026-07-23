@@ -1,4 +1,4 @@
-# 🛡️ Just a Chill Escrow: Feature Guide
+# 🛡️ Boundless Vault: Feature Guide
 
 Welcome to your self-custodial escrow platform for the XRP Ledger! This guide explains all the powerful features at your fingertips, in simple terms.
 
