@@ -5129,7 +5129,7 @@ if (startVaultBtnEl) {
       return;
     }
 
-    const { vault: vaultAddress, currency, issuer, recipient: dest, releaseTime: releaseTimeVal } = window.activeMonitorContext;
+    const { currency, issuer, recipient: dest, releaseTime: releaseTimeVal } = window.activeMonitorContext;
     let formattedCurrency = formatCurrencyCode(currency);
 
     if (!xrpl.isValidAddress(dest)) {
