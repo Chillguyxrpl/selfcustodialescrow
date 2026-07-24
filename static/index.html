@@ -1468,6 +1468,8 @@
                 </div>
               </div>
             </div>
+          </div>
+        </div>
 
           <!-- Pane 8: Enterprise Hub -->
           <div class="tab-pane fade" id="pane-enterprise" role="tabpanel" aria-labelledby="tab-enterprise-btn">
@@ -1492,7 +1494,7 @@
                         <span class="badge bg-success-subtle text-success border border-success-subtle">Active Mainnet</span>
                         <i class="bi bi-coin text-success fs-4"></i>
                       </div>
-                      <h6 class="fw-bold mb-1">XLS-85d Token Escrow</h6>
+                      <h6 class="fw-bold mb-1">XLS-85 Token Escrow</h6>
                       <p class="small text-muted mb-0">Native ledger escrows for IOUs, Stablecoins & Multi-Purpose Tokens (MPTs).</p>
                     </div>
                   </div>
@@ -1502,7 +1504,7 @@
                         <span class="badge bg-success-subtle text-success border border-success-subtle">Active Mainnet</span>
                         <i class="bi bi-layers-half text-primary fs-4"></i>
                       </div>
-                      <h6 class="fw-bold mb-1">XLS-56d Batch Bundling</h6>
+                      <h6 class="fw-bold mb-1">XLS-56 Batch Bundling</h6>
                       <p class="small text-muted mb-0">Atomic execution of up to 8 bundled escrows & token setups in 1 signature.</p>
                     </div>
                   </div>
@@ -1537,7 +1539,7 @@
                   </li>
                   <li class="nav-item" role="presentation">
                     <button class="nav-link fw-bold" id="ent-compliance-tab" data-bs-toggle="tab" data-bs-target="#ent-compliance-pane" type="button" role="tab" aria-controls="ent-compliance-pane" aria-selected="false">
-                      <i class="bi bi-shield-check text-success me-1"></i> RWA Compliance & AMM Clawback (XLS-73)
+                      <i class="bi bi-shield-check text-success me-1"></i> RWA Compliance & AMM Clawback (XLS-39)
                     </button>
                   </li>
                   <li class="nav-item" role="presentation">
@@ -1566,17 +1568,43 @@
                         <form id="enterpriseVestingForm">
                           <div class="mb-3">
                             <label class="form-label fw-bold small">Beneficiary Account Address (Destination)</label>
-                            <input type="text" id="entVestingDestination" class="form-control font-monospace" placeholder="r..." required>
+                            <div class="input-group">
+                              <input type="text" id="entVestingDestination" class="form-control font-monospace" placeholder="r..." required>
+                              <span class="input-group-text bg-body-tertiary text-success" id="entVestingDestinationValidIcon" style="display:none;" title="Valid XRPL Address">
+                                <i class="bi bi-check-circle-fill"></i>
+                              </span>
+                            </div>
+                            <div id="entVestingDestinationFeedback" class="text-danger small mt-1" style="display:none;">
+                              Invalid XRPL Address format. Must start with 'r' and be 25-35 characters with a valid base58 checksum.
+                            </div>
                           </div>
 
                           <div class="row g-2 mb-3">
                             <div class="col-md-4">
                               <label class="form-label fw-bold small">Token Currency</label>
-                              <input type="text" id="entVestingCurrency" class="form-control text-uppercase" placeholder="RLUSD, USD, or Hex" required>
+                              <select id="entVestingCurrencySelect" class="form-select text-uppercase fw-semibold mb-1">
+                                <option value="RLUSD" selected>RLUSD (Ripple USD)</option>
+                                <option value="USD">USD (US Dollar)</option>
+                                <option value="EUR">EUR (Euro)</option>
+                                <option value="XRP">XRP (Native)</option>
+                                <option value="CHILLGUY">CHILLGUY</option>
+                                <option value="MINT">MINT</option>
+                                <option value="CUSTOM">Custom Code / Hex...</option>
+                              </select>
+                              <input type="text" id="entVestingCurrencyCustom" class="form-control text-uppercase font-monospace form-control-sm" placeholder="Enter Currency Code or Hex" style="display: none;">
+                              <input type="hidden" id="entVestingCurrency" value="RLUSD">
                             </div>
                             <div class="col-md-8">
                               <label class="form-label fw-bold small">Token Issuer Address</label>
-                              <input type="text" id="entVestingIssuer" class="form-control font-monospace" placeholder="rIssuerAddress..." required>
+                              <div class="input-group">
+                                <input type="text" id="entVestingIssuer" class="form-control font-monospace" placeholder="rIssuerAddress..." required>
+                                <span class="input-group-text bg-body-tertiary text-success" id="entVestingIssuerValidIcon" style="display:none;" title="Valid XRPL Address">
+                                  <i class="bi bi-check-circle-fill"></i>
+                                </span>
+                              </div>
+                              <div id="entVestingIssuerFeedback" class="text-danger small mt-1" style="display:none;">
+                                Invalid XRPL Issuer Address format.
+                              </div>
                             </div>
                           </div>
 
@@ -1609,7 +1637,7 @@
 
                           <div class="d-grid">
                             <button type="button" id="btnGenerateEntVestingBatch" class="btn btn-primary fw-bold py-2">
-                              <i class="bi bi-layers-fill me-1"></i> Generate Atomic XLS-56d Vesting Batch Payload
+                              <i class="bi bi-layers-fill me-1"></i> Generate Atomic XLS-56 Vesting Batch Payload
                             </button>
                           </div>
                         </form>
@@ -1620,7 +1648,7 @@
                           <div>
                             <h6 class="fw-bold mb-3"><i class="bi bi-journal-text text-info me-2"></i> Vesting Batch Preview</h6>
                             <div id="entVestingPreview" class="small text-muted">
-                              Fill out the form to generate a preview of your multi-tranche XLS-85d escrow batch payload.
+                              Fill out the form to generate a preview of your multi-tranche XLS-85 escrow batch payload.
                             </div>
                           </div>
                           <div id="entMakerCheckerActions" class="mt-3 pt-3 border-top" style="display: none;">
@@ -1639,7 +1667,7 @@
                     </div>
                   </div>
 
-                  <!-- Enterprise Sub-Pane 2: RWA Compliance & AMM Clawback (XLS-73) -->
+                  <!-- Enterprise Sub-Pane 2: RWA Compliance & AMM Clawback (XLS-39) -->
                   <div class="tab-pane fade" id="ent-compliance-pane" role="tabpanel" aria-labelledby="ent-compliance-tab">
                     <div class="row">
                       <div class="col-md-6">
@@ -1649,7 +1677,7 @@
                           </div>
                           <div class="card-body">
                             <p class="small text-muted">
-                              Scan any token issuer account to verify regulatory flags including <code>lsfAllowTrustLineClawback</code> (XLS-73), <code>lsfRequireAuth</code>, and global freeze status.
+                              Scan any token issuer account to verify regulatory flags including <code>lsfAllowTrustLineClawback</code> (XLS-39), <code>lsfRequireAuth</code>, and global freeze status.
                             </p>
 
                             <div class="mb-3">
@@ -1659,6 +1687,9 @@
                                 <button class="btn btn-success" id="btnAuditIssuerFlags">
                                   <i class="bi bi-search"></i> Audit Issuer
                                 </button>
+                              </div>
+                              <div id="entAuditIssuerFeedback" class="text-danger small mt-1" style="display:none;">
+                                Invalid XRPL Address format.
                               </div>
                             </div>
 
@@ -1672,17 +1703,21 @@
                       <div class="col-md-6">
                         <div class="card border shadow-sm">
                           <div class="card-header bg-body-secondary fw-bold">
-                            <i class="bi bi-file-earmark-lock text-primary me-2"></i> Regulatory Clawback Compliance (XLS-73)
+                            <i class="bi bi-file-earmark-lock text-primary me-2"></i> Regulatory Clawback Compliance (XLS-39)
                           </div>
                           <div class="card-body small text-muted">
                             <p>
-                              Under XLS-73 (AMMClawback), token issuers can execute compliance-mandated recovery of tokenized real-world assets locked inside Automated Market Maker liquidity pools or escrows.
+                              Under XLS-39 (Clawback), token issuers can execute compliance-mandated recovery of tokenized real-world assets locked inside Automated Market Maker liquidity pools or escrows.
                             </p>
                             <div class="alert alert-info mb-0">
                               <i class="bi bi-info-circle-fill me-1"></i> <strong>Institutional Protection:</strong> Ensure your issuer account sets the <code>lsfAllowTrustLineClawback</code> flag before initial token issuance to maintain regulatory compliance for security tokens.
                             </div>
                           </div>
                         </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <!-- Enterprise Sub-Pane 3: ERP Financial Reporting (NetSuite/QuickBooks) -->
                   <div class="tab-pane fade" id="ent-erp-pane" role="tabpanel" aria-labelledby="ent-erp-tab">
                     <div class="row">
@@ -1728,6 +1763,7 @@
                         </div>
                       </div>
                     </div>
+                  </div>
                   </div>
 
                   <!-- Enterprise Sub-Pane 3: WASM Smart Escrows (XLS-100) -->

@@ -1,7 +1,7 @@
 """
 Independent Integration Test Suite for Boundless Vault Application.
 Runs without third-party test framework dependencies, testing FastAPI routes,
-Pydantic V2 validations, XLS-85d Token Escrow models, XLS-56d Batching,
+Pydantic V2 validations, XLS-85 Token Escrow models, XLS-56 Batching,
 and ERP Financial Reporting.
 """
 
@@ -49,7 +49,7 @@ def run_tests():
     assert_true(currencies_match("USD", "5553440000000000000000000000000000000000"), "ISO vs 40-char Hex currency match")
     assert_true(not currencies_match("USD", "EUR"), "Distinct currencies do not match")
 
-    # 3. Pydantic V2 Escrow Model Validations (XLS-85d & XLS-56d)
+    # 3. Pydantic V2 Escrow Model Validations (XLS-85 & XLS-56)
     print("\n--- Test Group 3: Pydantic V2 Escrow & Batch Models ---")
     try:
         escrow_xrp = EscrowCreate(
@@ -76,9 +76,9 @@ def run_tests():
             CancelAfter=850000000
         )
         amt_curr = escrow_iou.Amount.currency if hasattr(escrow_iou.Amount, 'currency') else escrow_iou.Amount["currency"]
-        assert_true(amt_curr == "RLUSD", "XLS-85d Native Token Escrow model validates correctly")
+        assert_true(amt_curr == "RLUSD", "XLS-85 Native Token Escrow model validates correctly")
     except Exception as e:
-        assert_true(False, f"XLS-85d Token Escrow failed validation: {e}")
+        assert_true(False, f"XLS-85 Token Escrow failed validation: {e}")
 
     try:
         finish_tx = EscrowFinish(

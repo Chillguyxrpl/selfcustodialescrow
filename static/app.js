@@ -7221,6 +7221,80 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Enterprise Hub Interactive Logic ---
+  // --- Token Currency Select Dropdown Handler ---
+  const entCurrSelect = document.getElementById('entVestingCurrencySelect');
+  const entCurrCustom = document.getElementById('entVestingCurrencyCustom');
+  const entCurrHidden = document.getElementById('entVestingCurrency');
+
+  if (entCurrSelect && entCurrHidden) {
+    const syncCurrency = () => {
+      if (entCurrSelect.value === 'CUSTOM') {
+        if (entCurrCustom) {
+          entCurrCustom.style.display = 'block';
+          entCurrHidden.value = (entCurrCustom.value || '').trim();
+        }
+      } else {
+        if (entCurrCustom) entCurrCustom.style.display = 'none';
+        entCurrHidden.value = entCurrSelect.value;
+      }
+    };
+
+    entCurrSelect.addEventListener('change', syncCurrency);
+    if (entCurrCustom) {
+      entCurrCustom.addEventListener('input', syncCurrency);
+    }
+    syncCurrency();
+  }
+
+  // --- Real-time XRPL Address Input Validation ---
+  const setupRealtimeAddressValidation = (inputId, iconId, feedbackId) => {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const icon = iconId ? document.getElementById(iconId) : null;
+    const feedback = feedbackId ? document.getElementById(feedbackId) : null;
+
+    const validate = () => {
+      const val = input.value.trim();
+      if (!val) {
+        input.classList.remove('is-valid', 'is-invalid');
+        if (icon) icon.style.display = 'none';
+        if (feedback) feedback.style.display = 'none';
+        return;
+      }
+
+      if (isValidXRPLAddressFormat(val)) {
+        input.classList.add('is-valid');
+        input.classList.remove('is-invalid');
+        if (icon) icon.style.display = 'inline-flex';
+        if (feedback) feedback.style.display = 'none';
+      } else {
+        input.classList.remove('is-valid');
+        if (icon) icon.style.display = 'none';
+        if (val.length >= 15) {
+          input.classList.add('is-invalid');
+          if (feedback) feedback.style.display = 'block';
+        } else {
+          input.classList.remove('is-invalid');
+          if (feedback) feedback.style.display = 'none';
+        }
+      }
+    };
+
+    input.addEventListener('input', validate);
+    input.addEventListener('blur', () => {
+      const val = input.value.trim();
+      if (val && !isValidXRPLAddressFormat(val)) {
+        input.classList.add('is-invalid');
+        if (feedback) feedback.style.display = 'block';
+      }
+    });
+  };
+
+  setupRealtimeAddressValidation('entVestingDestination', 'entVestingDestinationValidIcon', 'entVestingDestinationFeedback');
+  setupRealtimeAddressValidation('entVestingIssuer', 'entVestingIssuerValidIcon', 'entVestingIssuerFeedback');
+  setupRealtimeAddressValidation('entAuditIssuerInput', null, 'entAuditIssuerFeedback');
+  setupRealtimeAddressValidation('entErpAccountInput', null, null);
+
   const btnGenerateVesting = document.getElementById('btnGenerateEntVestingBatch');
   if (btnGenerateVesting) {
     btnGenerateVesting.addEventListener('click', () => {
@@ -7290,7 +7364,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       previewContainer.innerHTML = `
         <div class="alert alert-success py-2 mb-3 small">
-          <i class="bi bi-layers-fill me-1"></i> <strong>XLS-56d Batch Prepared!</strong> Bundling ${tranches} native token escrows into 1 signature.
+          <i class="bi bi-layers-fill me-1"></i> <strong>XLS-56 Batch Prepared!</strong> Bundling ${tranches} native token escrows into 1 signature.
         </div>
         <div class="mb-2 fw-bold text-dark">Destination: ${shortenAddress(dest)}</div>
         <div style="max-height: 220px; overflow-y: auto;">
@@ -7355,7 +7429,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <h6 class="fw-bold mb-2 text-dark"><i class="bi bi-shield-check text-success me-1"></i> Ledger Flags for ${shortenAddress(issuer)}</h6>
           <ul class="list-group list-group-flush small">
             <li class="list-group-item d-flex justify-content-between align-items-center bg-transparent">
-              <span>XLS-73 AMM / TrustLine Clawback</span>
+              <span>XLS-39 AMM / TrustLine Clawback</span>
               <span class="badge ${lsfAllowTrustLineClawback ? 'bg-success' : 'bg-secondary'}">${lsfAllowTrustLineClawback ? 'Enabled' : 'Disabled'}</span>
             </li>
             <li class="list-group-item d-flex justify-content-between align-items-center bg-transparent">
